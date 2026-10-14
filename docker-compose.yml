@@ -1,0 +1,85 @@
+name: mess-saas
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mess_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-messdb}
+      POSTGRES_USER: ${POSTGRES_USER:-mess}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-messpassword123}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5436}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mess} -d ${POSTGRES_DB:-messdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mess_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6385}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mess_backend
+    restart: unless-stopped
+    environment:
+      - APP_NAME=${APP_NAME:-MessManager BD}
+      - APP_ENV=${APP_ENV:-development}
+      - SECRET_KEY=${SECRET_KEY:-supersecret_jwt_change_in_production_key_bachelor_mess}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-mess}:${POSTGRES_PASSWORD:-messpassword123}@db:5432/${POSTGRES_DB:-messdb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    volumes:
+      - ./backend:/app
+      - backend_media:/app/media
+    ports:
+      - "${BACKEND_PORT:-8086}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: mess_frontend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "${FRONTEND_PORT:-3085}:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:${BACKEND_PORT:-8086}/api/v1
+      - NEXT_PUBLIC_APP_NAME=মেস ম্যানেজার বিডি
+      - NEXT_PUBLIC_CURRENCY=৳
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+    name: mess_pgdata
+  redisdata:
+    name: mess_redisdata
+  backend_media:
+    name: mess_backend_media
