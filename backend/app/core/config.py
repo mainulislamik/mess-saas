@@ -11,9 +11,13 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
+        "http://localhost:3085",
         "http://localhost:8000",
+        "http://localhost:8086",
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:3085",
         "http://127.0.0.1:8000",
+        "http://127.0.0.1:8086",
     ]
 
     class Config:

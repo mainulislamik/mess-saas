@@ -118,23 +118,23 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 type="button"
-                onClick={() => handleDemoLogin("01700112233", "password123")}
+                onClick={() => handleDemoLogin("01711002233", "password123")}
                 className="p-2.5 border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/40 text-left transition-all"
               >
                 <div className="font-bold text-slate-800 flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> রহিম (ম্যানেজার)
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> মোঃ ইমোন (ম্যানেজার)
                 </div>
-                <div className="text-slate-500 text-[11px] font-mono">01700112233</div>
+                <div className="text-slate-500 text-[11px] font-mono">01711002233</div>
               </button>
               <button
                 type="button"
-                onClick={() => handleDemoLogin("01700112244", "password123")}
+                onClick={() => handleDemoLogin("01711002234", "password123")}
                 className="p-2.5 border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/40 text-left transition-all"
               >
                 <div className="font-bold text-slate-800 flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> করিম (সদস্য)
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> তামিম ইকবাল (সদস্য)
                 </div>
-                <div className="text-slate-500 text-[11px] font-mono">01700112244</div>
+                <div className="text-slate-500 text-[11px] font-mono">01711002234</div>
               </button>
             </div>
           </div>
