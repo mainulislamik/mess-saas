@@ -29,12 +29,9 @@ export default function DashboardPage() {
 
   if (portalMode === "member") {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <DashboardNav />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <MemberDashboardView />
-        </main>
-      </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <MemberDashboardView />
+      </main>
     );
   }
 
@@ -69,34 +66,28 @@ export default function DashboardPage() {
 
   if (!currentMess) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <DashboardNav />
-        <main className="max-w-3xl mx-auto px-4 py-16 text-center">
-          <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-3xl mx-auto flex items-center justify-center mb-4">
-            <Users className="w-8 h-8" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">আপনি কোনো মেসে যুক্ত নন</h1>
-          <p className="text-slate-600 mb-6">
-            নতুন মেস তৈরি করে বন্ধুদের ইনভাইট করুন অথবা ফ্রেন্ডের মেস কোড দিয়ে জয়েন করুন।
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link
-              href="/dashboard/messes"
-              className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold shadow hover:bg-emerald-700 transition-all inline-flex items-center justify-center gap-2"
-            >
-              <PlusCircle className="w-4 h-4" /> নতুন মেস তৈরি করুন / যোগ দিন
-            </Link>
-          </div>
-        </main>
-      </div>
+      <main className="max-w-3xl mx-auto px-4 py-16 text-center">
+        <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-3xl mx-auto flex items-center justify-center mb-4">
+          <Users className="w-8 h-8" />
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">আপনি কোনো মেসে যুক্ত নন</h1>
+        <p className="text-slate-600 mb-6">
+          নতুন মেস তৈরি করে বন্ধুদের ইনভাইট করুন অথবা ফ্রেন্ডের মেস কোড দিয়ে জয়েন করুন।
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Link
+            href="/dashboard/messes"
+            className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold shadow hover:bg-emerald-700 transition-all inline-flex items-center justify-center gap-2"
+          >
+            <PlusCircle className="w-4 h-4" /> নতুন মেস তৈরি করুন / যোগ দিন
+          </Link>
+        </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <DashboardNav />
-
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Welcome Banner */}
         <div className="bg-gradient-to-r from-emerald-800 to-teal-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -303,6 +294,5 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
-    </div>
   );
 }

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { DashboardNav } from "@/components/DashboardNav";
 import {
   ShoppingBag,
   Plus,
@@ -121,10 +120,7 @@ export default function BazarPage() {
   if (!currentMess) return null;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <DashboardNav />
-
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs">
           <div>
@@ -347,6 +343,5 @@ export default function BazarPage() {
           </div>
         )}
       </main>
-    </div>
   );
 }
