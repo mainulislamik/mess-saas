@@ -52,12 +52,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [portalMode, setPortalModeState] = useState<"manager" | "member">("manager");
 
-  const isManager = currentMess?.my_role === "owner" || currentMess?.my_role === "manager";
+  const isManager =
+    currentMess?.my_role?.toLowerCase() === "owner" ||
+    currentMess?.my_role?.toLowerCase() === "manager";
 
   useEffect(() => {
     if (currentMess) {
-      if (currentMess.my_role === "member") {
+      const role = currentMess.my_role?.toLowerCase();
+      if (role === "member") {
         setPortalModeState("member");
+        if (typeof window !== "undefined") {
+          localStorage.setItem("portal_mode", "member");
+        }
       } else {
         const saved = (typeof window !== "undefined" ? localStorage.getItem("portal_mode") : null) as "manager" | "member" | null;
         setPortalModeState(saved || "manager");
@@ -124,6 +130,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (phone: string, password: string): Promise<User> => {
+    localStorage.removeItem("portal_mode");
+    localStorage.removeItem("current_mess_id");
     const res = await api.post("/auth/login", { phone, password });
     const { access_token, user: userData } = res.data;
     localStorage.setItem("mess_token", access_token);
@@ -148,6 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("mess_token");
     localStorage.removeItem("mess_user");
     localStorage.removeItem("current_mess_id");
+    localStorage.removeItem("portal_mode");
     setToken(null);
     setUser(null);
     setCurrentMess(null);

@@ -42,7 +42,7 @@ def main():
     # 1. Register 5 Members
     members = [
         {"name": "মোঃ ইমোন", "phone": "01711002233", "pass": "password123", "role": "owner", "seat": "রুম ১ (মাস্টার বেড)"},
-        {"name": "তামিম ইকবাল", "phone": "01711002234", "pass": "password123", "role": "manager", "seat": "রুম ১ (সিট ২)"},
+        {"name": "তামিম ইকবাল", "phone": "01711002234", "pass": "password123", "role": "member", "seat": "রুম ১ (সিট ২)"},
         {"name": "মুশফিকুর রহিম", "phone": "01711002235", "pass": "password123", "role": "member", "seat": "রুম ২ (সিট ১)"},
         {"name": "সাকিব আল হাসান", "phone": "01711002236", "pass": "password123", "role": "member", "seat": "রুম ২ (সিট ২)"},
         {"name": "তাসকিন আহমেদ", "phone": "01711002237", "pass": "password123", "role": "member", "seat": "রুম ৩ (ড্রয়িং সিট)"},
