@@ -8,6 +8,7 @@ from app.api.v1.fixed_costs import router as fixed_costs_router
 from app.api.v1.closings import router as closings_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.platform import router as platform_router
+from app.api.v1.master_sheet import router as master_sheet_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -19,3 +20,4 @@ api_router.include_router(fixed_costs_router)
 api_router.include_router(closings_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(platform_router)
+api_router.include_router(master_sheet_router)

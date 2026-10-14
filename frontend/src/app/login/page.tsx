@@ -35,9 +35,26 @@ export default function LoginPage() {
     }
   };
 
-  const handleDemoLogin = (p: string, pass: string) => {
+  const handleDemoLogin = async (p: string, pass: string) => {
     setPhone(p);
     setPassword(pass);
+    setLoading(true);
+    setError(null);
+    try {
+      await login(p, pass);
+      if (p === "IT") {
+        router.push("/platform");
+      } else {
+        router.push("/dashboard");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(
+        err.response?.data?.detail || "লগইন ব্যর্থ হয়েছে। ফোন নম্বর/আইডি বা পাসওয়ার্ড যাচাই করুন।"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
