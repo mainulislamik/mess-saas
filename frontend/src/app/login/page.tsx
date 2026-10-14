@@ -137,23 +137,6 @@ export default function LoginPage() {
               এক ক্লিকে লগইন টেস্ট করুন
             </p>
             <div className="space-y-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("IT", "imran%$#")}
-                className="w-full p-2.5 border-2 border-emerald-500/40 bg-emerald-50/60 rounded-xl hover:bg-emerald-100/70 hover:border-emerald-600 text-left transition-all flex items-center justify-between"
-              >
-                <div>
-                  <div className="font-extrabold text-emerald-950 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    👑 প্ল্যাটফর্ম সুপার অ্যাডমিন (IT)
-                  </div>
-                  <div className="text-emerald-700 text-[11px] font-mono mt-0.5">ID: IT • পাসওয়ার্ড: imran%$#</div>
-                </div>
-                <span className="text-[11px] font-bold px-2 py-0.5 bg-emerald-600 text-white rounded-md">
-                  অ্যাডমিন প্যানেল
-                </span>
-              </button>
-
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"

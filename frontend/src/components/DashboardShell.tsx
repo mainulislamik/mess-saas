@@ -80,12 +80,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           { href: "/dashboard/bazar", label: "বাজার শিডিউল ও তালিকা", icon: ShoppingBag },
         ];
 
-  const isSuperAdmin =
-    user?.is_superuser ||
-    user?.phone === "+880****2233" ||
-    user?.phone === "01711002233" ||
-    user?.phone?.toLowerCase() === "it";
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row text-slate-900">
       {/* Loading Overlay */}
@@ -244,32 +238,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           })}
         </nav>
 
-        {/* Bottom Section: Super Admin & User Profile */}
-        <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-2">
-          {/* Super Admin Quick Link */}
-          {isSuperAdmin && !collapsed && (
-            <Link
-              href="/platform"
-              className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all text-xs font-bold shadow-xs"
-            >
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>সুপার অ্যাডমিন প্ল্যাটফর্ম</span>
-              </div>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-            </Link>
-          )}
-
-          {isSuperAdmin && collapsed && (
-            <Link
-              href="/platform"
-              title="সুপার অ্যাডমিন প্ল্যাটফর্ম"
-              className="w-10 h-10 mx-auto flex items-center justify-center rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs"
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            </Link>
-          )}
-
+        {/* Bottom Section: User Profile */}
+        <div className="p-3 border-t border-slate-100 bg-slate-50/50">
           {/* User Profile Card */}
           {!collapsed ? (
             <div className="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200/70 shadow-xs">

@@ -39,7 +39,7 @@ export default function PlatformShell({ children }: { children: React.ReactNode 
     if (isLoading) return;
     if (!user) {
       router.replace("/login");
-    } else if (!user.is_superuser && user.phone !== "+8801711002233" && user.phone !== "01711002233") {
+    } else if (!user.is_superuser || user.phone !== "IT") {
       router.replace("/dashboard");
     }
   }, [user, isLoading, router]);

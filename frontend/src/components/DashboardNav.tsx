@@ -118,16 +118,6 @@ export function DashboardNav() {
 
           {/* User profile & Logout */}
           <div className="flex items-center gap-3">
-            {(user?.is_superuser || user?.phone === "+8801711002233" || user?.phone === "01711002233") && (
-              <Link
-                href="/platform"
-                className="px-2.5 py-1.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
-                title="সুপার অ্যাডমিন প্ল্যাটফর্ম প্যানেল"
-              >
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>সুপার অ্যাডমিন</span>
-              </Link>
-            )}
             <div className="text-right hidden sm:block">
               <div className="text-xs font-bold text-slate-900">{user?.name || "ব্যবহারকারী"}</div>
               <div className="text-[11px] font-mono text-slate-500">{user?.phone || ""}</div>
