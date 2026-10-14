@@ -32,6 +32,9 @@ class LoginRequest(BaseModel):
     @field_validator("phone")
     @classmethod
     def validate_phone(cls, v: str) -> str:
+        cleaned = v.strip()
+        if cleaned.upper() == "IT":
+            return "IT"
         return normalize_bd_phone(v)
 
 class TokenResponse(BaseModel):

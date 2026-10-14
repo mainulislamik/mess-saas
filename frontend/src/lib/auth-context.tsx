@@ -29,7 +29,7 @@ interface AuthContextType {
   currentMess: Mess | null;
   userMesses: Mess[];
   isLoading: boolean;
-  login: (phone: string, password: string) => Promise<void>;
+  login: (phone: string, password: string) => Promise<User>;
   register: (name: string, phone: string, password: string) => Promise<void>;
   logout: () => void;
   setCurrentMess: (mess: Mess) => void;
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = async (phone: string, password: string) => {
+  const login = async (phone: string, password: string): Promise<User> => {
     const res = await api.post("/auth/login", { phone, password });
     const { access_token, user: userData } = res.data;
     localStorage.setItem("mess_token", access_token);
@@ -104,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(access_token);
     setUser(userData);
     await refreshMesses();
+    return userData;
   };
 
   const register = async (name: string, phone: string, password: string) => {

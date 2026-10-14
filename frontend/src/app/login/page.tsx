@@ -20,11 +20,15 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(phone, password);
-      router.push("/dashboard");
+      const loggedUser = await login(phone.trim(), password);
+      if (loggedUser?.is_superuser || phone.trim().toUpperCase() === "IT") {
+        router.push("/platform");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: any) {
       setError(
-        err.response?.data?.detail || "লগইন ব্যর্থ হয়েছে। ফোন নম্বর বা পাসওয়ার্ড যাচাই করুন।"
+        err.response?.data?.detail || "লগইন ব্যর্থ হয়েছে। ফোন নম্বর/আইডি বা পাসওয়ার্ড যাচাই করুন।"
       );
     } finally {
       setLoading(false);
@@ -64,16 +68,16 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                মোবাইল নম্বর
+                মোবাইল নম্বর / সুপার অ্যাডমিন আইডি
               </label>
               <div className="relative rounded-xl shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                   <Phone className="w-4 h-4" />
                 </div>
                 <input
-                  type="tel"
+                  type="text"
                   required
-                  placeholder="017XXXXXXXX"
+                  placeholder="017XXXXXXXX অথবা IT"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="block w-full pl-10 pr-3.5 py-2.5 border border-slate-300 rounded-xl bg-slate-50/50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium transition-all"
@@ -113,29 +117,48 @@ export default function LoginPage() {
           {/* Quick Demo Fill Buttons */}
           <div className="mt-6 pt-6 border-t border-slate-200">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5 text-center">
-              এক ক্লিকে ডেমো লগইন টেস্ট করুন
+              এক ক্লিকে লগইন টেস্ট করুন
             </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="space-y-2 text-xs">
               <button
                 type="button"
-                onClick={() => handleDemoLogin("01711002233", "password123")}
-                className="p-2.5 border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/40 text-left transition-all"
+                onClick={() => handleDemoLogin("IT", "imran%$#")}
+                className="w-full p-2.5 border-2 border-emerald-500/40 bg-emerald-50/60 rounded-xl hover:bg-emerald-100/70 hover:border-emerald-600 text-left transition-all flex items-center justify-between"
               >
-                <div className="font-bold text-slate-800 flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> মোঃ ইমোন (ম্যানেজার)
+                <div>
+                  <div className="font-extrabold text-emerald-950 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    👑 প্ল্যাটফর্ম সুপার অ্যাডমিন (IT)
+                  </div>
+                  <div className="text-emerald-700 text-[11px] font-mono mt-0.5">ID: IT • পাসওয়ার্ড: imran%$#</div>
                 </div>
-                <div className="text-slate-500 text-[11px] font-mono">01711002233</div>
+                <span className="text-[11px] font-bold px-2 py-0.5 bg-emerald-600 text-white rounded-md">
+                  অ্যাডমিন প্যানেল
+                </span>
               </button>
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("01711002234", "password123")}
-                className="p-2.5 border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/40 text-left transition-all"
-              >
-                <div className="font-bold text-slate-800 flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> তামিম ইকবাল (সদস্য)
-                </div>
-                <div className="text-slate-500 text-[11px] font-mono">01711002234</div>
-              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDemoLogin("01711002233", "password123")}
+                  className="p-2.5 border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/40 text-left transition-all"
+                >
+                  <div className="font-bold text-slate-800 flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> মোঃ ইমোন
+                  </div>
+                  <div className="text-slate-500 text-[11px] font-mono">01711002233 (ম্যানেজার)</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDemoLogin("01711002234", "password123")}
+                  className="p-2.5 border border-slate-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/40 text-left transition-all"
+                >
+                  <div className="font-bold text-slate-800 flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> তামিম ইকবাল
+                  </div>
+                  <div className="text-slate-500 text-[11px] font-mono">01711002234 (সদস্য)</div>
+                </button>
+              </div>
             </div>
           </div>
 

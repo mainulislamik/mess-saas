@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse
@@ -50,7 +50,8 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    stmt = select(User).where(User.phone == req.phone)
+    phone_query = req.phone.strip()
+    stmt = select(User).where(func.lower(User.phone) == phone_query.lower())
     res = await db.execute(stmt)
     user = res.scalar_one_or_none()
 
