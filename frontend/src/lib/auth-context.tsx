@@ -1,0 +1,156 @@
+"use client";
+
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { api } from "./api";
+
+export interface User {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+  avatar?: string | null;
+}
+
+export interface Mess {
+  id: string;
+  name: string;
+  slug: string;
+  district: string;
+  thana: string;
+  area: string;
+  invite_code: string;
+  my_role: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  token: string | null;
+  currentMess: Mess | null;
+  userMesses: Mess[];
+  isLoading: boolean;
+  login: (phone: string, password: string) => Promise<void>;
+  register: (name: string, phone: string, password: string) => Promise<void>;
+  logout: () => void;
+  setCurrentMess: (mess: Mess) => void;
+  refreshMesses: () => Promise<Mess[]>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [currentMess, setCurrentMess] = useState<Mess | null>(null);
+  const [userMesses, setUserMesses] = useState<Mess[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const refreshMesses = async (): Promise<Mess[]> => {
+    try {
+      const res = await api.get("/messes");
+      const messes: Mess[] = res.data;
+      setUserMesses(messes);
+      if (messes.length > 0) {
+        const savedId = localStorage.getItem("current_mess_id");
+        const found = messes.find((m) => m.id === savedId) || messes[0];
+        setCurrentMess(found);
+        localStorage.setItem("current_mess_id", found.id);
+      } else {
+        setCurrentMess(null);
+      }
+      return messes;
+    } catch {
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    const savedToken = localStorage.getItem("mess_token");
+    const savedUser = localStorage.getItem("mess_user");
+
+    if (savedToken && savedUser) {
+      setToken(savedToken);
+      try {
+        setUser(JSON.parse(savedUser));
+        api.get("/auth/me")
+          .then((res) => {
+            setUser(res.data);
+            localStorage.setItem("mess_user", JSON.stringify(res.data));
+            return refreshMesses();
+          })
+          .catch(() => {
+            logout();
+          })
+          .finally(() => {
+            setIsLoading(false);
+          });
+      } catch {
+        logout();
+        setIsLoading(false);
+      }
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const login = async (phone: string, password: string) => {
+    const res = await api.post("/auth/login", { phone, password });
+    const { access_token, user: userData } = res.data;
+    localStorage.setItem("mess_token", access_token);
+    localStorage.setItem("mess_user", JSON.stringify(userData));
+    setToken(access_token);
+    setUser(userData);
+    await refreshMesses();
+  };
+
+  const register = async (name: string, phone: string, password: string) => {
+    const res = await api.post("/auth/register", { name, phone, password });
+    const { access_token, user: userData } = res.data;
+    localStorage.setItem("mess_token", access_token);
+    localStorage.setItem("mess_user", JSON.stringify(userData));
+    setToken(access_token);
+    setUser(userData);
+    await refreshMesses();
+  };
+
+  const logout = () => {
+    localStorage.removeItem("mess_token");
+    localStorage.removeItem("mess_user");
+    localStorage.removeItem("current_mess_id");
+    setToken(null);
+    setUser(null);
+    setCurrentMess(null);
+    setUserMesses([]);
+  };
+
+  const handleSetCurrentMess = (mess: Mess) => {
+    setCurrentMess(mess);
+    localStorage.setItem("current_mess_id", mess.id);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        currentMess,
+        userMesses,
+        isLoading,
+        login,
+        register,
+        logout,
+        setCurrentMess: handleSetCurrentMess,
+        refreshMesses,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}

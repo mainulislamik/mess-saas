@@ -1,0 +1,33 @@
+import uuid
+from datetime import date as date_type, datetime
+from typing import Optional
+from pydantic import BaseModel, Field
+
+class BazarCreate(BaseModel):
+    user_id: uuid.UUID  # shopper
+    date: date_type
+    amount: float = Field(gt=0, description="Amount in BDT (৳)")
+    items: str = Field(min_length=2, description="List of items shopped")
+    receipt_url: Optional[str] = None
+    notes: Optional[str] = None
+
+class BazarResponse(BaseModel):
+    id: uuid.UUID
+    mess_id: uuid.UUID
+    user_id: uuid.UUID
+    user_name: Optional[str] = None
+    date: date_type
+    amount: float
+    items: str
+    receipt_url: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class BazarMonthlySummary(BaseModel):
+    month: str
+    total_bazar: float
+    bazar_count: int
+    items: list[BazarResponse]
