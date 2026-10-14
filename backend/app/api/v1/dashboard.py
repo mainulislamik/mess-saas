@@ -15,7 +15,7 @@ from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
-from app.schemas.dashboard import DashboardStats
+from app.schemas.dashboard import DashboardStats, MemberPersonalSummary, TodayMealDetail
 
 router = APIRouter(prefix="/messes/{mess_id}/dashboard", tags=["Dashboard"])
 
@@ -167,4 +167,170 @@ async def get_dashboard(
         active_member_count=active_member_count,
         recent_bazars=recent_bazars,
         recent_deposits=recent_deposits,
+    )
+
+@router.get("/my-summary", response_model=MemberPersonalSummary)
+async def get_member_personal_summary(
+    mess_id: uuid.UUID,
+    month: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem = await get_membership_for_mess(mess_id, current_user, db)
+
+    today = date_type.today()
+    month = get_safe_month(month)
+
+    year, m_num = map(int, month.split("-"))
+    start_date = date_type(year, m_num, 1)
+    if m_num == 12:
+        end_date = date_type(year + 1, 1, 1)
+    else:
+        end_date = date_type(year, m_num + 1, 1)
+
+    # Mess details
+    mess_stmt = select(Mess).where(Mess.id == mess_id)
+    mess = (await db.execute(mess_stmt)).scalar_one_or_none()
+    mess_name = mess.name if mess else "My Mess"
+
+    # Active member count
+    mem_stmt = select(func.count(Membership.id)).where(Membership.mess_id == mess_id)
+    active_member_count = (await db.execute(mem_stmt)).scalar() or 1
+
+    # Today's meal for current user
+    today_stmt = select(Meal).where(
+        Meal.mess_id == mess_id,
+        Meal.user_id == current_user.id,
+        Meal.date == today,
+    )
+    my_today_obj = (await db.execute(today_stmt)).scalar_one_or_none()
+    
+    # Check if dinner cutoff passed (after 17:00 / 5 PM)
+    now = datetime.now()
+    can_edit_dinner = now.hour < 17
+
+    today_detail = TodayMealDetail(
+        date=str(today),
+        breakfast=my_today_obj.breakfast if my_today_obj else 0.0,
+        lunch=my_today_obj.lunch if my_today_obj else 1.0,
+        dinner=my_today_obj.dinner if my_today_obj else 1.0,
+        is_off=my_today_obj.is_off if my_today_obj else False,
+        total_meals=my_today_obj.total_meals if my_today_obj else 2.0,
+        dinner_cutoff_time="17:00 (বিকাল ৫টা)",
+        can_edit_dinner=can_edit_dinner,
+    )
+
+    # Month meals
+    month_meals_stmt = select(Meal).where(
+        Meal.mess_id == mess_id,
+        Meal.date >= start_date,
+        Meal.date < end_date,
+    )
+    all_month_meals = (await db.execute(month_meals_stmt)).scalars().all()
+    mess_total_meals = sum(m.total_meals for m in all_month_meals)
+    my_month_meals = sum(m.total_meals for m in all_month_meals if m.user_id == current_user.id)
+
+    # Month Bazar
+    bazar_stmt = select(func.coalesce(func.sum(Bazar.amount), 0.0)).where(
+        Bazar.mess_id == mess_id,
+        Bazar.date >= start_date,
+        Bazar.date < end_date,
+    )
+    mess_total_bazar = (await db.execute(bazar_stmt)).scalar() or 0.0
+
+    # Meal rate
+    estimated_meal_rate = (mess_total_bazar / mess_total_meals) if mess_total_meals > 0 else 0.0
+    my_meal_cost = round(my_month_meals * estimated_meal_rate, 2)
+
+    # Month Fixed Cost
+    fixed_stmt = select(func.coalesce(func.sum(FixedCost.amount), 0.0)).where(
+        FixedCost.mess_id == mess_id,
+        FixedCost.month == month,
+    )
+    mess_total_fixed = (await db.execute(fixed_stmt)).scalar() or 0.0
+    my_fixed_cost_share = round(mess_total_fixed / active_member_count, 2) if active_member_count > 0 else 0.0
+
+    # Personal Deposits
+    my_dep_stmt = (
+        select(Deposit)
+        .where(
+            Deposit.mess_id == mess_id,
+            Deposit.user_id == current_user.id,
+            Deposit.date >= start_date,
+            Deposit.date < end_date,
+        )
+        .order_by(Deposit.date.desc())
+    )
+    my_deposits_raw = (await db.execute(my_dep_stmt)).scalars().all()
+    my_total_deposit = sum(d.amount for d in my_deposits_raw if d.is_verified)
+
+    # Mess total deposit
+    mess_dep_stmt = select(func.coalesce(func.sum(Deposit.amount), 0.0)).where(
+        Deposit.mess_id == mess_id,
+        Deposit.date >= start_date,
+        Deposit.date < end_date,
+        Deposit.is_verified == True,
+    )
+    mess_total_deposit = (await db.execute(mess_dep_stmt)).scalar() or 0.0
+
+    total_personal_cost = round(my_meal_cost + my_fixed_cost_share, 2)
+    net_balance = round(my_total_deposit - total_personal_cost, 2)
+
+    # Formatted personal deposit items
+    my_deposits = [
+        {
+            "id": str(d.id),
+            "amount": d.amount,
+            "date": str(d.date),
+            "method": d.method.value if hasattr(d.method, "value") else str(d.method),
+            "transaction_id": d.transaction_id,
+            "is_verified": d.is_verified,
+            "notes": d.notes,
+        }
+        for d in my_deposits_raw
+    ]
+
+    # Recent bazars for transparency (last 5)
+    recent_bazar_stmt = (
+        select(Bazar)
+        .options(selectinload(Bazar.user))
+        .where(Bazar.mess_id == mess_id)
+        .order_by(Bazar.date.desc())
+        .limit(5)
+    )
+    recent_bazars_raw = (await db.execute(recent_bazar_stmt)).scalars().all()
+    recent_bazars = [
+        {
+            "id": str(b.id),
+            "user_name": b.user.name if b.user else "Member",
+            "date": str(b.date),
+            "amount": b.amount,
+            "items": b.items,
+        }
+        for b in recent_bazars_raw
+    ]
+
+    return MemberPersonalSummary(
+        mess_id=mess_id,
+        mess_name=mess_name,
+        user_id=current_user.id,
+        user_name=current_user.name,
+        phone=current_user.phone,
+        seat_label=mem.seat_label,
+        my_role=mem.role.value if hasattr(mem.role, "value") else str(mem.role),
+        month=month,
+        my_total_deposit=round(my_total_deposit, 2),
+        my_month_meals=round(my_month_meals, 2),
+        estimated_meal_rate=round(estimated_meal_rate, 2),
+        my_meal_cost=my_meal_cost,
+        my_fixed_cost_share=my_fixed_cost_share,
+        total_personal_cost=total_personal_cost,
+        net_balance=net_balance,
+        mess_total_meals=round(mess_total_meals, 2),
+        mess_total_bazar=round(mess_total_bazar, 2),
+        mess_total_deposit=round(mess_total_deposit, 2),
+        active_member_count=active_member_count,
+        today=today_detail,
+        my_deposits=my_deposits,
+        recent_bazars=recent_bazars,
     )

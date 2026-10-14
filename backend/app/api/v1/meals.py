@@ -227,6 +227,7 @@ async def update_my_meal(
         existing.dinner = data.dinner
         existing.is_off = data.is_off
         existing.notes = data.notes
+        meal_obj = existing
     else:
         new_meal = Meal(
             mess_id=mess_id,
@@ -239,6 +240,18 @@ async def update_my_meal(
             notes=data.notes,
         )
         db.add(new_meal)
+        meal_obj = new_meal
 
     await db.commit()
-    return {"message": "Your meal preference was updated successfully"}
+    await db.refresh(meal_obj)
+    return {
+        "message": "আপনার মিল পছন্দ সফলভাবে সংরক্ষিত হয়েছে",
+        "meal": {
+            "date": str(meal_obj.date),
+            "breakfast": meal_obj.breakfast,
+            "lunch": meal_obj.lunch,
+            "dinner": meal_obj.dinner,
+            "is_off": meal_obj.is_off,
+            "total_meals": meal_obj.total_meals,
+        }
+    }

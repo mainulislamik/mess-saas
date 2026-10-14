@@ -37,6 +37,9 @@ interface AuthContextType {
   impersonateMess: (messId: string) => Promise<void>;
   revertImpersonation: () => Promise<void>;
   isImpersonating: boolean;
+  portalMode: "manager" | "member";
+  setPortalMode: (mode: "manager" | "member") => void;
+  isManager: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,6 +50,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentMess, setCurrentMess] = useState<Mess | null>(null);
   const [userMesses, setUserMesses] = useState<Mess[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [portalMode, setPortalModeState] = useState<"manager" | "member">("manager");
+
+  const isManager = currentMess?.my_role === "owner" || currentMess?.my_role === "manager";
+
+  useEffect(() => {
+    if (currentMess) {
+      if (currentMess.my_role === "member") {
+        setPortalModeState("member");
+      } else {
+        const saved = (typeof window !== "undefined" ? localStorage.getItem("portal_mode") : null) as "manager" | "member" | null;
+        setPortalModeState(saved || "manager");
+      }
+    }
+  }, [currentMess]);
+
+  const setPortalMode = (mode: "manager" | "member") => {
+    if (!isManager && mode === "manager") {
+      return;
+    }
+    setPortalModeState(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("portal_mode", mode);
+    }
+  };
 
   const refreshMesses = async (): Promise<Mess[]> => {
     try {
@@ -188,6 +215,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         impersonateMess,
         revertImpersonation,
         isImpersonating,
+        portalMode,
+        setPortalMode,
+        isManager,
       }}
     >
       {children}

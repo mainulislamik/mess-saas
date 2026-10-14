@@ -71,21 +71,35 @@ def main():
     owner_token = tokens[members[0]["phone"]]
     owner_id = user_ids[members[0]["phone"]]
 
-    # 2. Create Mess: "ধানমন্ডি শান্তি নিবাস"
+    # 2. Check or Create Mess: "ধানমন্ডি শান্তি নিবাস"
     mess_name = "ধানমন্ডি শান্তি নিবাস"
-    mess = post(
-        f"{BASE_URL}/messes",
-        {
-            "name": mess_name,
-            "district": "Dhaka",
-            "thana": "Dhanmondi",
-            "area": "Road 4/A, House 22",
-        },
-        token=owner_token,
-    )
-    mess_id = mess["id"]
-    invite_code = mess["invite_code"]
-    print(f"✓ Created Mess: {mess_name} (Code: {invite_code})")
+    # Check existing messes first
+    req_my = urllib.request.Request(f"{BASE_URL}/messes", headers={"Authorization": f"Bearer {owner_token}"})
+    try:
+        with urllib.request.urlopen(req_my) as resp:
+            existing_messes = json.loads(resp.read().decode())
+    except Exception:
+        existing_messes = []
+    
+    existing = next((m for m in existing_messes if m.get("name") == mess_name), None)
+    if existing:
+        mess_id = existing["id"]
+        invite_code = existing["invite_code"]
+        print(f"✓ Reusing existing Mess: {mess_name} (Code: {invite_code})")
+    else:
+        mess = post(
+            f"{BASE_URL}/messes",
+            {
+                "name": mess_name,
+                "district": "Dhaka",
+                "thana": "Dhanmondi",
+                "area": "Road 4/A, House 22",
+            },
+            token=owner_token,
+        )
+        mess_id = mess["id"]
+        invite_code = mess["invite_code"]
+        print(f"✓ Created Mess: {mess_name} (Code: {invite_code})")
 
     # 3. Other 4 members join using invite code
     for m in members[1:]:

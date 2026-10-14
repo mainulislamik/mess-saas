@@ -89,14 +89,29 @@ export default function PlatformMessesPage() {
   };
 
   const handleToggleSuspend = async (mess: MessItem) => {
+    setActionLoading(mess.id);
     try {
-      setActionLoading(mess.id);
       await api.patch(`/platform/messes/${mess.id}`, {
         is_suspended: !mess.is_suspended,
       });
-      await fetchMesses();
-    } catch (err) {
-      alert("স্ট্যাটাস আপডেট করতে সমস্যা হয়েছে");
+      fetchMesses();
+    } catch (err: any) {
+      alert("স্ট্যাটাস আপডেট করতে ব্যর্থ হয়েছে");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteMess = async (mess: MessItem) => {
+    if (!confirm(`আপনি কি নিশ্চিত যে '${mess.name}' (কোড: ${mess.invite_code}) মেসটি এবং এর সমস্ত ডাটা চিরতরে মুছে ফেলতে চান?`)) {
+      return;
+    }
+    setActionLoading(mess.id);
+    try {
+      await api.delete(`/platform/messes/${mess.id}`);
+      fetchMesses();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "মেস মুছতে ব্যর্থ হয়েছে");
     } finally {
       setActionLoading(null);
     }
@@ -303,7 +318,7 @@ export default function PlatformMessesPage() {
                           className={`p-1.5 rounded-lg border transition-all ${
                             mess.is_suspended
                               ? "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                              : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"
+                              : "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
                           }`}
                           title={mess.is_suspended ? "মেস পুনরায় সচল করুন" : "মেস সাময়িকভাবে স্থগিত করুন"}
                         >
@@ -312,6 +327,16 @@ export default function PlatformMessesPage() {
                           ) : (
                             <PauseCircle className="w-4 h-4" />
                           )}
+                        </button>
+
+                        {/* Delete mess button */}
+                        <button
+                          onClick={() => handleDeleteMess(mess)}
+                          disabled={actionLoading === mess.id}
+                          className="p-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition-all"
+                          title="মেস এবং সমস্ত ডাটা ডিলিট করুন"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>

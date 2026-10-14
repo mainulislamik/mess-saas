@@ -135,4 +135,38 @@ async def delete_deposit(
 
     await db.delete(deposit)
     await db.commit()
+
+@router.post("/{deposit_id}/verify", response_model=DepositResponse)
+async def verify_deposit(
+    mess_id: uuid.UUID,
+    deposit_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem = await get_membership_for_mess(mess_id, current_user, db)
+    if mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="অনুমোদনের জন্য ম্যানেজার বা ওনার পারমিশন প্রয়োজন")
+
+    stmt = select(Deposit).options(selectinload(Deposit.user)).where(Deposit.id == deposit_id, Deposit.mess_id == mess_id)
+    deposit = (await db.execute(stmt)).scalar_one_or_none()
+    if not deposit:
+        raise HTTPException(status_code=404, detail="ডিপোজিট রেকর্ড পাওয়া যায়নি")
+
+    deposit.is_verified = True
+    await db.commit()
+    await db.refresh(deposit)
+
+    return DepositResponse(
+        id=deposit.id,
+        mess_id=deposit.mess_id,
+        user_id=deposit.user_id,
+        user_name=deposit.user.name if deposit.user else "Member",
+        amount=deposit.amount,
+        date=deposit.date,
+        method=deposit.method,
+        transaction_id=deposit.transaction_id,
+        is_verified=deposit.is_verified,
+        notes=deposit.notes,
+        created_at=deposit.created_at,
+    )
     return None

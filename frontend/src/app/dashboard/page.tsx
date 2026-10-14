@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { DashboardNav } from "@/components/DashboardNav";
+import MemberDashboardView from "@/components/MemberDashboardView";
 import {
   Utensils,
   ShoppingBag,
@@ -22,9 +23,20 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, currentMess, isLoading } = useAuth();
+  const { user, currentMess, isLoading, portalMode } = useAuth();
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+
+  if (portalMode === "member") {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <DashboardNav />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <MemberDashboardView />
+        </main>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!isLoading && !user) {

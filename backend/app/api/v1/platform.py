@@ -153,6 +153,7 @@ async def list_all_messes_superadmin(
                 "phone": m.owner.phone,
             } if m.owner else None,
             "member_count": len(m.memberships),
+            "members_count": len(m.memberships),
             "created_at": m.created_at.isoformat(),
         })
     return response
@@ -283,6 +284,28 @@ async def superadmin_login_as_mess(
         "owner_name": owner.name,
         "owner_phone": owner.phone,
     }
+
+@router.delete("/messes/{mess_id}")
+async def delete_mess_superadmin(
+    mess_id: uuid.UUID,
+    admin: User = Depends(get_current_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    mess = (await db.execute(select(Mess).where(Mess.id == mess_id))).scalar_one_or_none()
+    if not mess:
+        raise HTTPException(status_code=404, detail="মেস পাওয়া যায়নি")
+
+    # Cascade delete all related entities
+    await db.execute(delete(Meal).where(Meal.mess_id == mess_id))
+    await db.execute(delete(Bazar).where(Bazar.mess_id == mess_id))
+    await db.execute(delete(Deposit).where(Deposit.mess_id == mess_id))
+    await db.execute(delete(FixedCost).where(FixedCost.mess_id == mess_id))
+    await db.execute(delete(MonthlyClosing).where(MonthlyClosing.mess_id == mess_id))
+    await db.execute(delete(Membership).where(Membership.mess_id == mess_id))
+    await db.execute(delete(Mess).where(Mess.id == mess_id))
+    await db.commit()
+
+    return {"success": True, "message": f"মেস '{mess.name}' এবং এর সমস্ত ডাটা সফলভাবে মুছে ফেলা হয়েছে"}
 
 @router.get("/users")
 async def list_all_users_superadmin(

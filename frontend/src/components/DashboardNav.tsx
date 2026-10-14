@@ -17,14 +17,18 @@ import {
 
 export function DashboardNav() {
   const pathname = usePathname();
-  const { user, currentMess, userMesses, setCurrentMess, logout } = useAuth();
+  const { user, currentMess, userMesses, setCurrentMess, logout, portalMode, setPortalMode, isManager } = useAuth();
 
-  const navItems = [
+  const navItems = portalMode === "manager" ? [
     { href: "/dashboard", label: "ড্যাশবোর্ড", icon: LayoutDashboard },
     { href: "/dashboard/meals", label: "মিল কাউন্ট", icon: CalendarCheck },
     { href: "/dashboard/bazar", label: "বাজার খরচ", icon: ShoppingBag },
     { href: "/dashboard/closing", label: "মাস সমাপনী (Closing)", icon: FileCheck2 },
     { href: "/dashboard/messes", label: "মেস সেটিংস", icon: Building2 },
+  ] : [
+    { href: "/dashboard", label: "আমার হিসাব", icon: LayoutDashboard },
+    { href: "/dashboard/meals", label: "আমার মিল", icon: CalendarCheck },
+    { href: "/dashboard/bazar", label: "বাজার শিডিউল", icon: ShoppingBag },
   ];
 
   return (
@@ -43,22 +47,46 @@ export function DashboardNav() {
             </Link>
 
             {userMesses.length > 0 && currentMess && (
-              <div className="flex items-center gap-1.5 bg-slate-100/90 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl px-2.5 py-1 text-xs font-semibold text-slate-800 transition-colors">
-                <Building2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-                <select
-                  value={currentMess.id}
-                  onChange={(e) => {
-                    const m = userMesses.find((x) => x.id === e.target.value);
-                    if (m) setCurrentMess(m);
-                  }}
-                  className="bg-transparent font-semibold text-slate-900 border-none focus:outline-none cursor-pointer pr-1"
-                >
-                  {userMesses.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.my_role === "owner" ? "মালিক" : m.my_role === "manager" ? "ম্যানেজার" : "সদস্য"})
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-slate-100/90 hover:bg-slate-200/70 border border-slate-200/80 rounded-xl px-2.5 py-1 text-xs font-semibold text-slate-800 transition-colors">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                  <select
+                    value={currentMess.id}
+                    onChange={(e) => {
+                      const m = userMesses.find((x) => x.id === e.target.value);
+                      if (m) setCurrentMess(m);
+                    }}
+                    className="bg-transparent font-semibold text-slate-900 border-none focus:outline-none cursor-pointer pr-1"
+                  >
+                    {userMesses.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.my_role === "owner" ? "মালিক" : m.my_role === "manager" ? "ম্যানেজার" : "সদস্য"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Dual Portal Switcher for Managers/Owners */}
+                {isManager && (
+                  <div className="hidden sm:flex items-center bg-slate-200/70 p-0.5 rounded-xl text-xs font-bold">
+                    <button
+                      onClick={() => setPortalMode("manager")}
+                      className={`px-2.5 py-1 rounded-lg transition ${
+                        portalMode === "manager" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      🛡️ ম্যানেজমেন্ট
+                    </button>
+                    <button
+                      onClick={() => setPortalMode("member")}
+                      className={`px-2.5 py-1 rounded-lg transition ${
+                        portalMode === "member" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      👤 আমার হিসাব
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
