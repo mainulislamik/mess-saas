@@ -77,14 +77,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           { href: "/dashboard/bazar", label: "বাজার শিডিউল ও তালিকা", icon: ShoppingBag },
         ];
 
-  if (isLoading || !mounted) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-      </div>
-    );
-  }
-
   const isSuperAdmin =
     user?.is_superuser ||
     user?.phone === "+880****2233" ||
@@ -93,6 +85,13 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row text-slate-900">
+      {/* Loading Overlay */}
+      {(isLoading || !mounted) && (
+        <div className="fixed inset-0 bg-white/70 backdrop-blur-xs z-[100] flex items-center justify-center pointer-events-none">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+        </div>
+      )}
+
       {/* Mobile Backdrop */}
       {mobileOpen && (
         <div
