@@ -43,6 +43,23 @@ async def get_current_user(
         )
     return user
 
+from datetime import date as date_type
+import re
+
+def get_safe_month(month: Optional[str] = None) -> str:
+    if month and re.match(r"^\d{4}-\d{2}$", month.strip()):
+        return month.strip()
+    today = date_type.today()
+    return f"{today.year:04d}-{today.month:02d}"
+
+def get_safe_date(d: Optional[str] = None) -> date_type:
+    if d:
+        try:
+            return date_type.fromisoformat(d.strip())
+        except Exception:
+            pass
+    return date_type.today()
+
 async def get_membership_for_mess(
     mess_id: uuid.UUID,
     user: User,

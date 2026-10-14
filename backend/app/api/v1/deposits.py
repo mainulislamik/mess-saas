@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.deposit import Deposit
 from app.models.enums import MemberRole
-from app.core.deps import get_current_user, get_membership_for_mess
+from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.deposit import DepositCreate, DepositResponse, DepositMonthlySummary
 
 router = APIRouter(prefix="/messes/{mess_id}/deposits", tags=["Deposits"])
@@ -19,15 +19,12 @@ router = APIRouter(prefix="/messes/{mess_id}/deposits", tags=["Deposits"])
 @router.get("/", response_model=DepositMonthlySummary, include_in_schema=False)
 async def list_deposits(
     mess_id: uuid.UUID,
-    month: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    month: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await get_membership_for_mess(mess_id, current_user, db)
-
-    if not month:
-        today = date_type.today()
-        month = f"{today.year:04d}-{today.month:02d}"
+    month = get_safe_month(month)
 
     year, m_num = map(int, month.split("-"))
     start_date = date_type(year, m_num, 1)

@@ -29,5 +29,7 @@ class BazarResponse(BaseModel):
 class BazarMonthlySummary(BaseModel):
     month: str
     total_bazar: float
+    total_bazar_amount: Optional[float] = None
     bazar_count: int
     items: list[BazarResponse]
+    bazars: Optional[list[BazarResponse]] = None

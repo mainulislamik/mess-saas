@@ -36,11 +36,12 @@ export default function ClosingPage() {
   }, []);
 
   const fetchClosing = async () => {
-    if (!currentMess || !month) return;
+    if (!currentMess) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/messes/${currentMess.id}/closings/${month}`);
+      const targetMonth = month || new Date().toISOString().slice(0, 7);
+      const res = await api.get(`/messes/${currentMess.id}/closings/${targetMonth}`);
       setClosingData(res.data);
     } catch (err: any) {
       console.error(err);

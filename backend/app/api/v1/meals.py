@@ -11,7 +11,7 @@ from app.models.user import User
 from app.models.membership import Membership
 from app.models.meal import Meal
 from app.models.enums import MemberRole
-from app.core.deps import get_current_user, get_membership_for_mess
+from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.meal import (
     MealBatchUpdate,
     MealSelfUpdate,
@@ -101,11 +101,12 @@ async def get_daily_meals(
 @router.get("/monthly", response_model=List[MemberMealSummary])
 async def get_monthly_meal_summary(
     mess_id: uuid.UUID,
-    month: str = Query(..., pattern=r"^\d{4}-\d{2}$", description="Month in YYYY-MM"),
+    month: Optional[str] = Query(None, description="Month in YYYY-MM"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await get_membership_for_mess(mess_id, current_user, db)
+    month = get_safe_month(month)
 
     year, m_num = map(int, month.split("-"))
     start_date = date_type(year, m_num, 1)

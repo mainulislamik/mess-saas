@@ -48,9 +48,10 @@ export default function BazarPage() {
   const fetchBazars = async () => {
     if (!currentMess) return;
     try {
-      const res = await api.get(`/messes/${currentMess.id}/bazars?month=${month}`);
-      setBazars(res.data.bazars || []);
-      setTotalAmount(res.data.total_bazar_amount || 0);
+      const targetMonth = month || new Date().toISOString().slice(0, 7);
+      const res = await api.get(`/messes/${currentMess.id}/bazars?month=${targetMonth}`);
+      setBazars(res.data.bazars || res.data.items || []);
+      setTotalAmount(res.data.total_bazar_amount ?? res.data.total_bazar ?? 0);
     } catch (err) {
       console.error(err);
     }

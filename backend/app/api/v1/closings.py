@@ -16,7 +16,7 @@ from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
 from app.models.closing import MonthlyClosing
 from app.models.enums import MemberRole
-from app.core.deps import get_current_user, get_membership_for_mess
+from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.closing import (
     MemberClosingSummary,
     MonthlyClosingPreview,
@@ -156,11 +156,12 @@ async def calculate_monthly_closing_data(
 @router.get("/preview", response_model=MonthlyClosingPreview)
 async def preview_closing(
     mess_id: uuid.UUID,
-    month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+    month: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await get_membership_for_mess(mess_id, current_user, db)
+    month = get_safe_month(month)
     return await calculate_monthly_closing_data(mess_id, month, db)
 
 @router.get("/{month}", response_model=MonthlyClosingPreview)
@@ -171,6 +172,7 @@ async def get_or_preview_closing_month(
     db: AsyncSession = Depends(get_db),
 ):
     await get_membership_for_mess(mess_id, current_user, db)
+    month = get_safe_month(month)
     # Check if finalized
     stmt = select(MonthlyClosing).where(
         MonthlyClosing.mess_id == mess_id,

@@ -35,9 +35,10 @@ export default function MealsPage() {
   }, []);
 
   const fetchDaily = async () => {
-    if (!currentMess || !date) return;
+    if (!currentMess) return;
     try {
-      const res = await api.get(`/messes/${currentMess.id}/meals?date=${date}`);
+      const targetDate = date || new Date().toISOString().split("T")[0];
+      const res = await api.get(`/messes/${currentMess.id}/meals?date=${targetDate}`);
       setDailyData(res.data);
     } catch (err) {
       console.error(err);
@@ -45,10 +46,10 @@ export default function MealsPage() {
   };
 
   const fetchMonthly = async () => {
-    if (!currentMess || !date) return;
+    if (!currentMess) return;
     try {
-      const month = date.slice(0, 7);
-      const res = await api.get(`/messes/${currentMess.id}/meals/monthly?month=${month}`);
+      const targetMonth = (date || new Date().toISOString().split("T")[0]).slice(0, 7);
+      const res = await api.get(`/messes/${currentMess.id}/meals/monthly?month=${targetMonth}`);
       setMonthlySummary(res.data);
     } catch (err) {
       console.error(err);

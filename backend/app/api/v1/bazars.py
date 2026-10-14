@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.bazar import Bazar
 from app.models.enums import MemberRole
-from app.core.deps import get_current_user, get_membership_for_mess
+from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.bazar import BazarCreate, BazarResponse, BazarMonthlySummary
 
 router = APIRouter(prefix="/messes/{mess_id}/bazars", tags=["Bazars"])
@@ -19,15 +19,12 @@ router = APIRouter(prefix="/messes/{mess_id}/bazars", tags=["Bazars"])
 @router.get("/", response_model=BazarMonthlySummary, include_in_schema=False)
 async def list_bazars(
     mess_id: uuid.UUID,
-    month: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    month: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await get_membership_for_mess(mess_id, current_user, db)
-
-    if not month:
-        today = date_type.today()
-        month = f"{today.year:04d}-{today.month:02d}"
+    month = get_safe_month(month)
 
     year, m_num = map(int, month.split("-"))
     start_date = date_type(year, m_num, 1)
@@ -69,8 +66,10 @@ async def list_bazars(
     return BazarMonthlySummary(
         month=month,
         total_bazar=round(total, 2),
+        total_bazar_amount=round(total, 2),
         bazar_count=len(items),
         items=items,
+        bazars=items,
     )
 
 @router.post("", response_model=BazarResponse, status_code=status.HTTP_201_CREATED)
