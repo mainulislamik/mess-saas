@@ -9,6 +9,7 @@ export interface User {
   phone: string;
   email?: string | null;
   avatar?: string | null;
+  is_superuser?: boolean;
 }
 
 export interface Mess {
@@ -33,6 +34,9 @@ interface AuthContextType {
   logout: () => void;
   setCurrentMess: (mess: Mess) => void;
   refreshMesses: () => Promise<Mess[]>;
+  impersonateMess: (messId: string) => Promise<void>;
+  revertImpersonation: () => Promise<void>;
+  isImpersonating: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -127,6 +131,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("current_mess_id", mess.id);
   };
 
+  const isImpersonating = typeof window !== "undefined" && !!localStorage.getItem("original_admin_token");
+
+  const impersonateMess = async (messId: string) => {
+    const res = await api.post(`/platform/messes/${messId}/login-as`);
+    const { access_token } = res.data;
+    if (typeof window !== "undefined") {
+      if (!localStorage.getItem("original_admin_token")) {
+        localStorage.setItem("original_admin_token", token || "");
+        localStorage.setItem("original_admin_user", JSON.stringify(user));
+      }
+      localStorage.setItem("mess_token", access_token);
+    }
+    setToken(access_token);
+    const meRes = await api.get("/auth/me");
+    setUser(meRes.data);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mess_user", JSON.stringify(meRes.data));
+    }
+    await refreshMesses();
+  };
+
+  const revertImpersonation = async () => {
+    if (typeof window !== "undefined") {
+      const origToken = localStorage.getItem("original_admin_token");
+      const origUser = localStorage.getItem("original_admin_user");
+      if (origToken) {
+        localStorage.setItem("mess_token", origToken);
+        localStorage.removeItem("original_admin_token");
+        setToken(origToken);
+        if (origUser) {
+          const parsedUser = JSON.parse(origUser);
+          setUser(parsedUser);
+          localStorage.setItem("mess_user", origUser);
+        }
+        localStorage.removeItem("original_admin_user");
+        await refreshMesses();
+      }
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -140,6 +184,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         setCurrentMess: handleSetCurrentMess,
         refreshMesses,
+        impersonateMess,
+        revertImpersonation,
+        isImpersonating,
       }}
     >
       {children}

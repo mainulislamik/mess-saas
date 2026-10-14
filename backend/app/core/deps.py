@@ -60,6 +60,16 @@ def get_safe_date(d: Optional[str] = None) -> date_type:
             pass
     return date_type.today()
 
+async def get_current_superadmin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not current_user.is_superuser and current_user.phone not in ["+8801711002233", "+8801700112233"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="প্ল্যাটফর্ম সুপার অ্যাডমিন প্রিভিলেজ প্রয়োজন",
+        )
+    return current_user
+
 async def get_membership_for_mess(
     mess_id: uuid.UUID,
     user: User,

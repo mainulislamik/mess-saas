@@ -52,6 +52,7 @@ class UserResponse(BaseModel):
     email: Optional[str] = None
     avatar: Optional[str] = None
     is_active: bool
+    is_superuser: bool = False
     created_at: datetime
 
     class Config:

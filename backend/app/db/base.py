@@ -8,6 +8,7 @@ from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
 from app.models.closing import MonthlyClosing
+from app.models.platform import PlatformSetting, PlatformAnnouncement, SubscriptionPayment
 
 __all__ = [
     "Base",
@@ -24,4 +25,7 @@ __all__ = [
     "Deposit",
     "FixedCost",
     "MonthlyClosing",
+    "PlatformSetting",
+    "PlatformAnnouncement",
+    "SubscriptionPayment",
 ]
