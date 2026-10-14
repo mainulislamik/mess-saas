@@ -24,15 +24,28 @@ class DashboardStats(BaseModel):
     recent_bazars: List[Any] = []
     recent_deposits: List[Any] = []
 
-class TodayMealDetail(BaseModel):
+class SlotStatus(BaseModel):
+    is_open: bool
+    cutoff_time_str: str
+    message: str
+
+class DayMealDetail(BaseModel):
     date: str
     breakfast: float
     lunch: float
     dinner: float
+    guest_breakfast: float = 0.0
+    guest_lunch: float = 0.0
+    guest_dinner: float = 0.0
     is_off: bool
     total_meals: float
+    breakfast_status: Optional[SlotStatus] = None
+    lunch_status: Optional[SlotStatus] = None
+    dinner_status: Optional[SlotStatus] = None
     dinner_cutoff_time: str = "17:00"
     can_edit_dinner: bool = True
+
+TodayMealDetail = DayMealDetail
 
 class MemberPersonalSummary(BaseModel):
     mess_id: uuid.UUID
@@ -60,7 +73,9 @@ class MemberPersonalSummary(BaseModel):
     active_member_count: int
     
     # Daily interactive meal
-    today: TodayMealDetail
+    today: DayMealDetail
+    tomorrow: Optional[DayMealDetail] = None
+    meal_rules: dict = {}
     
     # Recent items
     my_deposits: List[Any] = []

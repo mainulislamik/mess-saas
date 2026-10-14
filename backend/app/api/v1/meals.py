@@ -1,5 +1,6 @@
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type, datetime, time as time_type, timedelta
+from zoneinfo import ZoneInfo
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.session import get_db
 from app.models.user import User
+from app.models.mess import Mess
 from app.models.membership import Membership
 from app.models.meal import Meal
 from app.models.enums import MemberRole
@@ -188,6 +190,9 @@ async def batch_update_meals(
             existing.breakfast = item.breakfast
             existing.lunch = item.lunch
             existing.dinner = item.dinner
+            existing.guest_breakfast = item.guest_breakfast
+            existing.guest_lunch = item.guest_lunch
+            existing.guest_dinner = item.guest_dinner
             existing.is_off = item.is_off
             existing.notes = item.notes
         else:
@@ -198,6 +203,9 @@ async def batch_update_meals(
                 breakfast=item.breakfast,
                 lunch=item.lunch,
                 dinner=item.dinner,
+                guest_breakfast=item.guest_breakfast,
+                guest_lunch=item.guest_lunch,
+                guest_dinner=item.guest_dinner,
                 is_off=item.is_off,
                 notes=item.notes,
             )
@@ -206,6 +214,13 @@ async def batch_update_meals(
     await db.commit()
     return {"message": "Meals updated successfully", "count": len(data.meals)}
 
+def parse_time_str(val: str, default_hour: int, default_min: int) -> time_type:
+    try:
+        parts = val.split(":")
+        return time_type(int(parts[0]), int(parts[1]))
+    except Exception:
+        return time_type(default_hour, default_min)
+
 @router.post("/me")
 async def update_my_meal(
     mess_id: uuid.UUID,
@@ -213,7 +228,65 @@ async def update_my_meal(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await get_membership_for_mess(mess_id, current_user, db)
+    mem = await get_membership_for_mess(mess_id, current_user, db)
+
+    # Fetch Mess for rules
+    mess = (await db.execute(select(Mess).where(Mess.id == mess_id))).scalar_one_or_none()
+    if not mess:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="মেস পাওয়া যায়নি")
+
+    meal_rules = mess.meal_rules or {
+        "breakfast_unit": 0.5,
+        "breakfast_cutoff_time": "22:00",
+        "breakfast_cutoff_prev_day": True,
+        "lunch_cutoff_time": "09:00",
+        "dinner_cutoff_time": "17:00",
+        "allow_guest_meals": True,
+        "max_guest_per_meal": 3,
+    }
+
+    # Timezone-aware validation in Asia/Dhaka
+    tz = ZoneInfo("Asia/Dhaka")
+    now_dhaka = datetime.now(tz)
+    today_dhaka = now_dhaka.date()
+    tomorrow_dhaka = today_dhaka + timedelta(days=1)
+    current_time = now_dhaka.time()
+
+    is_manager = mem.role in [MemberRole.OWNER, MemberRole.MANAGER]
+
+    # Non-managers have strict cutoff limits
+    if not is_manager:
+        if data.date < today_dhaka:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="অতীতের তারিখের মিল পরিবর্তন করার অনুমতি নেই।",
+            )
+        if data.date > tomorrow_dhaka:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="শুধুমাত্র আজকের ও আগামীকালের অগ্রিম মিল পরিবর্তন করা যাবে।",
+            )
+
+        # Guest meal quota check
+        total_guest = data.guest_breakfast + data.guest_lunch + data.guest_dinner
+        allow_guest = meal_rules.get("allow_guest_meals", True)
+        max_guest = int(meal_rules.get("max_guest_per_meal", 3))
+
+        if total_guest > 0:
+            if not allow_guest:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="এই মেসে সাধারণ সদস্যদের জন্য মেহমান/গেস্ট মিল অনুমোদন নেই।",
+                )
+            if (
+                data.guest_breakfast > max_guest
+                or data.guest_lunch > max_guest
+                or data.guest_dinner > max_guest
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"প্রতি বেলায় সর্বোচ্চ {max_guest} টি মেহমান মিল দেওয়া যাবে।",
+                )
 
     stmt = select(Meal).where(
         Meal.mess_id == mess_id,
@@ -221,10 +294,72 @@ async def update_my_meal(
         Meal.date == data.date,
     )
     existing = (await db.execute(stmt)).scalar_one_or_none()
+
+    # Enforce Cutoffs for non-managers
+    if not is_manager:
+        old_b = existing.breakfast if existing else 0.0
+        old_gb = existing.guest_breakfast if existing else 0.0
+        old_l = existing.lunch if existing else 1.0
+        old_gl = existing.guest_lunch if existing else 0.0
+        old_d = existing.dinner if existing else 1.0
+        old_gd = existing.guest_dinner if existing else 0.0
+
+        b_cutoff_str = meal_rules.get("breakfast_cutoff_time", "22:00")
+        b_prev_day = meal_rules.get("breakfast_cutoff_prev_day", True)
+        l_cutoff_str = meal_rules.get("lunch_cutoff_time", "09:00")
+        d_cutoff_str = meal_rules.get("dinner_cutoff_time", "17:00")
+
+        b_cutoff_time = parse_time_str(b_cutoff_str, 22, 0)
+        l_cutoff_time = parse_time_str(l_cutoff_str, 9, 0)
+        d_cutoff_time = parse_time_str(d_cutoff_str, 17, 0)
+
+        # Breakfast Cutoff Check
+        if (data.breakfast != old_b) or (data.guest_breakfast != old_gb):
+            if data.date == today_dhaka:
+                if b_prev_day:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"আজকের সকালের নাস্তার কাট-অফ সময় (গতকাল রাত {b_cutoff_str}) পার হয়ে গেছে। পরিবর্তনের জন্য মেস ম্যানেজারের সাথে যোগাযোগ করুন।",
+                    )
+                else:
+                    if current_time >= b_cutoff_time:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"আজকের সকালের নাস্তার কাট-অফ সময় (সকাল {b_cutoff_str}) পার হয়ে গেছে।",
+                        )
+            elif data.date == tomorrow_dhaka:
+                if b_prev_day:
+                    if current_time >= b_cutoff_time:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"আগামীকালের সকালের নাস্তার কাট-অফ সময় (আজ রাত {b_cutoff_str}) পার হয়ে গেছে। পরিবর্তনের জন্য ম্যানেজারের সাথে যোগাযোগ করুন।",
+                        )
+
+        # Lunch Cutoff Check
+        if (data.lunch != old_l) or (data.guest_lunch != old_gl):
+            if data.date == today_dhaka:
+                if current_time >= l_cutoff_time:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"আজকের দুপুরের খাবারের কাট-অফ সময় (সকাল {l_cutoff_str}) পার হয়ে গেছে। পরিবর্তনের জন্য ম্যানেজারের সাথে যোগাযোগ করুন।",
+                    )
+
+        # Dinner Cutoff Check
+        if (data.dinner != old_d) or (data.guest_dinner != old_gd):
+            if data.date == today_dhaka:
+                if current_time >= d_cutoff_time:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"আজকের রাতের খাবারের কাট-অফ সময় (বিকাল {d_cutoff_str}) পার হয়ে গেছে। পরিবর্তনের জন্য ম্যানেজারের সাথে যোগাযোগ করুন।",
+                    )
+
     if existing:
         existing.breakfast = data.breakfast
         existing.lunch = data.lunch
         existing.dinner = data.dinner
+        existing.guest_breakfast = data.guest_breakfast
+        existing.guest_lunch = data.guest_lunch
+        existing.guest_dinner = data.guest_dinner
         existing.is_off = data.is_off
         existing.notes = data.notes
         meal_obj = existing
@@ -236,6 +371,9 @@ async def update_my_meal(
             breakfast=data.breakfast,
             lunch=data.lunch,
             dinner=data.dinner,
+            guest_breakfast=data.guest_breakfast,
+            guest_lunch=data.guest_lunch,
+            guest_dinner=data.guest_dinner,
             is_off=data.is_off,
             notes=data.notes,
         )
@@ -251,7 +389,10 @@ async def update_my_meal(
             "breakfast": meal_obj.breakfast,
             "lunch": meal_obj.lunch,
             "dinner": meal_obj.dinner,
+            "guest_breakfast": meal_obj.guest_breakfast,
+            "guest_lunch": meal_obj.guest_lunch,
+            "guest_dinner": meal_obj.guest_dinner,
             "is_off": meal_obj.is_off,
             "total_meals": meal_obj.total_meals,
-        }
+        },
     }

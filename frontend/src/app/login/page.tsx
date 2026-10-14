@@ -20,8 +20,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const loggedUser = await login(phone.trim(), password);
-      if (loggedUser?.is_superuser || phone.trim().toUpperCase() === "IT") {
+      await login(phone.trim(), password);
+      if (phone.trim().toUpperCase() === "IT") {
         router.push("/platform");
       } else {
         router.push("/dashboard");

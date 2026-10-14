@@ -15,6 +15,13 @@ import {
   UserCheck,
   AlertCircle,
   CheckCircle,
+  Clock,
+  Utensils,
+  Coffee,
+  Sun,
+  Moon,
+  Sliders,
+  Save,
 } from "lucide-react";
 
 export default function MessSettingsPage() {
@@ -41,6 +48,17 @@ export default function MessSettingsPage() {
   const isManagerOrOwner =
     currentMess?.my_role === "owner" || currentMess?.my_role === "manager";
 
+  // Meal Rules State
+  const [breakfastUnit, setBreakfastUnit] = useState<number>(0.5);
+  const [breakfastCutoff, setBreakfastCutoff] = useState<string>("22:00");
+  const [breakfastPrevDay, setBreakfastPrevDay] = useState<boolean>(true);
+  const [lunchCutoff, setLunchCutoff] = useState<string>("09:00");
+  const [dinnerCutoff, setDinnerCutoff] = useState<string>("17:00");
+  const [allowGuest, setAllowGuest] = useState<boolean>(true);
+  const [maxGuest, setMaxGuest] = useState<number>(3);
+  const [savingRules, setSavingRules] = useState<boolean>(false);
+  const [rulesSuccess, setRulesSuccess] = useState<string | null>(null);
+
   const fetchMembers = async () => {
     if (!currentMess) return;
     setLoadingMembers(true);
@@ -54,6 +72,24 @@ export default function MessSettingsPage() {
     }
   };
 
+  const fetchMealRules = async () => {
+    if (!currentMess) return;
+    try {
+      const res = await api.get(`/messes/${currentMess.id}/meal-rules`);
+      if (res.data) {
+        setBreakfastUnit(res.data.breakfast_unit ?? 0.5);
+        setBreakfastCutoff(res.data.breakfast_cutoff_time ?? "22:00");
+        setBreakfastPrevDay(res.data.breakfast_cutoff_prev_day ?? true);
+        setLunchCutoff(res.data.lunch_cutoff_time ?? "09:00");
+        setDinnerCutoff(res.data.dinner_cutoff_time ?? "17:00");
+        setAllowGuest(res.data.allow_guest_meals ?? true);
+        setMaxGuest(res.data.max_guest_per_meal ?? 3);
+      }
+    } catch (err) {
+      console.error("Failed to load meal rules", err);
+    }
+  };
+
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login");
@@ -61,8 +97,36 @@ export default function MessSettingsPage() {
     }
     if (currentMess) {
       fetchMembers();
+      if (isManagerOrOwner) {
+        fetchMealRules();
+      }
     }
-  }, [user, currentMess, isLoading, router]);
+  }, [user, currentMess, isLoading, router, isManagerOrOwner]);
+
+  const handleSaveMealRules = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentMess) return;
+    setSavingRules(true);
+    setRulesSuccess(null);
+    try {
+      await api.patch(`/messes/${currentMess.id}/meal-rules`, {
+        breakfast_unit: Number(breakfastUnit),
+        breakfast_cutoff_time: breakfastCutoff,
+        breakfast_cutoff_prev_day: breakfastPrevDay,
+        lunch_cutoff_time: lunchCutoff,
+        dinner_cutoff_time: dinnerCutoff,
+        allow_guest_meals: allowGuest,
+        max_guest_per_meal: Number(maxGuest),
+      });
+      await refreshMesses();
+      setRulesSuccess("মেস মিল রুলস ও সময়সীমা সফলভাবে সংরক্ষিত হয়েছে!");
+      setTimeout(() => setRulesSuccess(null), 4000);
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "রুলস সেভ করা সম্ভব হয়নি");
+    } finally {
+      setSavingRules(false);
+    }
+  };
 
   const handleCopyInvite = () => {
     if (!currentMess) return;
@@ -170,6 +234,228 @@ export default function MessSettingsPage() {
                 {copied ? "কপি হয়েছে!" : "কোড কপি করুন"}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Manager Meal Rules & Cut-off Policy Customization */}
+        {currentMess && isManagerOrOwner && (
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 shadow-xs">
+                  <Sliders className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    মেস মিল রুলস ও সময়সীমা সেটিংস
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    কাট-অফ সময়, সকালের নাস্তার মিল রেট ও মেহমান মিল পলিসি নির্ধারণ করুন
+                  </p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                <Clock className="w-3.5 h-3.5 text-amber-700" /> বাংলাদেশ সময় (UTC+6) অনুযায়ী কার্যকর
+              </span>
+            </div>
+
+            {rulesSuccess && (
+              <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded-2xl flex items-center gap-3 shadow-xs">
+                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span className="font-semibold">{rulesSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveMealRules} className="space-y-6">
+              {/* Option 1: Breakfast Unit Weight */}
+              <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/70">
+                <label className="block text-sm font-bold text-slate-800 mb-1 flex items-center gap-2">
+                  <Coffee className="w-4 h-4 text-amber-600" /> সকালের নাস্তার মিল কাউন্ট (Breakfast Unit Rate)
+                </label>
+                <p className="text-xs text-slate-500 mb-3">
+                  সকালের নাস্তাকে হাফ মিল (০.৫) নাকি পুরো এক মিল (১.০) হিসেবে গণ্য করা হবে?
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg">
+                  <button
+                    type="button"
+                    onClick={() => setBreakfastUnit(0.5)}
+                    className={`p-3.5 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
+                      breakfastUnit === 0.5
+                        ? "bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold"
+                        : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <div>
+                      <div className="text-sm font-bold">০.৫ মিল (অর্ধেক মিল)</div>
+                      <div className="text-xs text-slate-500 font-normal">হালকা নাস্তা (ডিম/পরোটা/খিচুড়ি)</div>
+                    </div>
+                    {breakfastUnit === 0.5 && <Check className="w-5 h-5 text-emerald-600" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBreakfastUnit(1.0)}
+                    className={`p-3.5 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
+                      breakfastUnit === 1.0
+                        ? "bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold"
+                        : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <div>
+                      <div className="text-sm font-bold">১.০ মিল (পুরো এক মিল)</div>
+                      <div className="text-xs text-slate-500 font-normal">ভারী নাস্তা বা ১ মিল কাউন্ট</div>
+                    </div>
+                    {breakfastUnit === 1.0 && <Check className="w-5 h-5 text-emerald-600" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Option 2: Meal Cut-off Times */}
+              <div className="space-y-3">
+                <label className="block text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-emerald-600" /> বেলার কাট-অফ সময়সীমা (Meal Cut-off Limits)
+                </label>
+                <p className="text-xs text-slate-500">
+                  নির্ধারিত সময়ের পর সাধারণ সদস্যরা মিল অন/অফ করতে পারবে না (বাটন লক হয়ে যাবে)।
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                  {/* Breakfast Cut-off */}
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-3">
+                    <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                      <Coffee className="w-4 h-4 text-amber-600" />
+                      <span>সকালের নাস্তা</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        কাট-অফ সময় (২৪ ঘণ্টা ফরম্যাট)
+                      </label>
+                      <input
+                        type="time"
+                        value={breakfastCutoff}
+                        onChange={(e) => setBreakfastCutoff(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={breakfastPrevDay}
+                        onChange={(e) => setBreakfastPrevDay(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300"
+                      />
+                      <span className="text-xs text-slate-600 font-medium">
+                        আগের দিন রাতে কার্যকর (সকালে পরিবর্তন বন্ধ থাকবে)
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Lunch Cut-off */}
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-3">
+                    <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                      <Sun className="w-4 h-4 text-amber-500" />
+                      <span>দুপুরের খাবার</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        কাট-অফ সময় (২৪ ঘণ্টা ফরম্যাট)
+                      </label>
+                      <input
+                        type="time"
+                        value={lunchCutoff}
+                        onChange={(e) => setLunchCutoff(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500 pt-1">
+                      সেদিন এই সময়ের পর দুপুরের মিল এন্ট্রি লক হয়ে যাবে (উদা: ০৯:০০ AM)।
+                    </p>
+                  </div>
+
+                  {/* Dinner Cut-off */}
+                  <div className="p-4 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-3">
+                    <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
+                      <Moon className="w-4 h-4 text-indigo-500" />
+                      <span>রাতের খাবার</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        কাট-অফ সময় (২৪ ঘণ্টা ফরম্যাট)
+                      </label>
+                      <input
+                        type="time"
+                        value={dinnerCutoff}
+                        onChange={(e) => setDinnerCutoff(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500 pt-1">
+                      সেদিন এই সময়ের পর রাতের মিল এন্ট্রি লক হয়ে যাবে (উদা: ১৭:০০ বা বিকাল ৫টা)।
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Option 3: Guest Meals Policy */}
+              <div className="bg-slate-50/70 p-5 rounded-2xl border border-slate-200/70 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-emerald-600" /> মেহমান / গেস্ট মিল পলিসি (Guest Meals)
+                    </label>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      সদস্যরা কি তাদের মিল অর্ডারের সাথে মেহমানের মিল যুক্ত করতে পারবে?
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowGuest}
+                      onChange={(e) => setAllowGuest(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    <span className="ml-3 text-xs font-bold text-slate-800">
+                      {allowGuest ? "অনুমোদিত" : "বন্ধ"}
+                    </span>
+                  </label>
+                </div>
+
+                {allowGuest && (
+                  <div className="pt-2 border-t border-slate-200/60 max-w-sm">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      প্রতি বেলায় সদস্যপ্রতি সর্বোচ্চ মেহমান মিল সংখ্যা
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={maxGuest}
+                        onChange={(e) => setMaxGuest(Number(e.target.value))}
+                        className="w-24 px-3 py-2 border border-slate-300 rounded-xl bg-white text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-center"
+                      />
+                      <span className="text-xs text-slate-500">টি মিল (প্রতি বেলা সর্বোচ্চ)</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={savingRules}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-sm shadow-md hover:shadow-lg transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {savingRules ? "সংরক্ষণ হচ্ছে..." : "নিয়মাবলী সংরক্ষণ করুন"}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 

@@ -17,6 +17,11 @@ class Meal(Base):
     breakfast: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     lunch: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     dinner: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+
+    guest_breakfast: Mapped[float] = mapped_column(Float, default=0.0, nullable=False, server_default="0.0")
+    guest_lunch: Mapped[float] = mapped_column(Float, default=0.0, nullable=False, server_default="0.0")
+    guest_dinner: Mapped[float] = mapped_column(Float, default=0.0, nullable=False, server_default="0.0")
+
     is_off: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
@@ -29,7 +34,12 @@ class Meal(Base):
     def total_meals(self) -> float:
         if self.is_off:
             return 0.0
-        return round(self.breakfast + self.lunch + self.dinner, 2)
+        return round(
+            (self.breakfast + self.guest_breakfast)
+            + (self.lunch + self.guest_lunch)
+            + (self.dinner + self.guest_dinner),
+            2,
+        )
 
     __table_args__ = (
         UniqueConstraint("mess_id", "user_id", "date", name="uq_mess_user_date_meal"),

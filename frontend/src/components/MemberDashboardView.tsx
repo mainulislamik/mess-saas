@@ -16,7 +16,14 @@ import {
   UserCheck,
   TrendingDown,
   TrendingUp,
-  DollarSign
+  DollarSign,
+  CalendarDays,
+  Lock,
+  Unlock,
+  Users,
+  Coffee,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 export default function MemberDashboardView() {
@@ -25,10 +32,16 @@ export default function MemberDashboardView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Today meal state
+  // Active day selection: "today" | "tomorrow"
+  const [selectedDay, setSelectedDay] = useState<"today" | "tomorrow">("today");
+
+  // Meal state for active form
   const [breakfast, setBreakfast] = useState(0.0);
   const [lunch, setLunch] = useState(1.0);
   const [dinner, setDinner] = useState(1.0);
+  const [guestBreakfast, setGuestBreakfast] = useState(0.0);
+  const [guestLunch, setGuestLunch] = useState(0.0);
+  const [guestDinner, setGuestDinner] = useState(0.0);
   const [isOff, setIsOff] = useState(false);
   const [savingMeal, setSavingMeal] = useState(false);
   const [mealSuccess, setMealSuccess] = useState(false);
@@ -47,12 +60,6 @@ export default function MemberDashboardView() {
       setLoading(true);
       const res = await api.get(`/messes/${currentMess.id}/dashboard/my-summary`);
       setSummary(res.data);
-      if (res.data?.today) {
-        setBreakfast(res.data.today.breakfast);
-        setLunch(res.data.today.lunch);
-        setDinner(res.data.today.dinner);
-        setIsOff(res.data.today.is_off);
-      }
     } catch (err: any) {
       setError(err.response?.data?.detail || "ব্যক্তিগত হিসাব লোড করতে সমস্যা হয়েছে।");
     } finally {
@@ -64,17 +71,36 @@ export default function MemberDashboardView() {
     fetchSummary();
   }, [currentMess?.id]);
 
+  // Sync form inputs when summary or selectedDay changes
+  useEffect(() => {
+    if (!summary) return;
+    const dayData = selectedDay === "today" ? summary.today : summary.tomorrow;
+    if (dayData) {
+      setBreakfast(dayData.breakfast ?? 0.0);
+      setLunch(dayData.lunch ?? 1.0);
+      setDinner(dayData.dinner ?? 1.0);
+      setGuestBreakfast(dayData.guest_breakfast ?? 0.0);
+      setGuestLunch(dayData.guest_lunch ?? 0.0);
+      setGuestDinner(dayData.guest_dinner ?? 0.0);
+      setIsOff(dayData.is_off ?? false);
+    }
+  }, [selectedDay, summary]);
+
   const handleSaveMeal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentMess?.id) return;
+    const targetDate = selectedDay === "today" ? summary?.today?.date : summary?.tomorrow?.date;
     try {
       setSavingMeal(true);
       setMealSuccess(false);
       await api.post(`/messes/${currentMess.id}/meals/me`, {
-        date: summary?.today?.date || new Date().toISOString().split("T")[0],
+        date: targetDate,
         breakfast,
         lunch,
         dinner,
+        guest_breakfast: guestBreakfast,
+        guest_lunch: guestLunch,
+        guest_dinner: guestDinner,
         is_off: isOff,
       });
       setMealSuccess(true);
@@ -224,116 +250,335 @@ export default function MemberDashboardView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left 2 Cols: Daily Meal Preference Form */}
-        <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
+        <div className="lg:col-span-2 bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-6">
+          {/* Header with Day Switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
             <div>
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <UtensilsCrossed className="w-5 h-5 text-emerald-600" /> আজকের মিল পছন্দ ও স্ট্যাটাস
+                <UtensilsCrossed className="w-5 h-5 text-emerald-600" />
+                {selectedDay === "today" ? "আজকের মিল পছন্দ ও স্ট্যাটাস" : "আগামীকালের মিল (অগ্রিম এন্ট্রি)"}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">তারিখ: {summary.today.date} (কাট-অফ সময়: বিকাল ৫:০০)</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                  <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                  তারিখ: {selectedDay === "today" ? summary.today?.date : summary.tomorrow?.date}
+                </span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                  {selectedDay === "today" ? "আজ" : "আগামীকাল"}
+                </span>
+              </div>
             </div>
-            {mealSuccess && (
-              <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full flex items-center gap-1 animate-pulse">
-                <CheckCircle2 className="w-4 h-4" /> সংরক্ষিত হয়েছে!
-              </span>
-            )}
+
+            {/* Day Selector Pills */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => setSelectedDay("today")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  selectedDay === "today"
+                    ? "bg-white text-emerald-950 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                আজকের মিল
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDay("tomorrow")}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedDay === "tomorrow"
+                    ? "bg-white text-emerald-950 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>আগামীকালের মিল</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              </button>
+            </div>
           </div>
+
+          {mealSuccess && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-2xl flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>মিল পছন্দ সফলভাবে সংরক্ষিত হয়েছে!</span>
+            </div>
+          )}
 
           <form onSubmit={handleSaveMeal} className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Breakfast */}
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  সকালের নাস্তা (Breakfast)
-                </label>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setBreakfast(0.0)}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
-                      breakfast === 0 ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    বন্ধ (0)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBreakfast(0.5)}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
-                      breakfast === 0.5 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    চালু (0.5)
-                  </button>
-                </div>
-              </div>
+              {/* 1. Breakfast */}
+              {(() => {
+                const currentSlot = selectedDay === "today" ? summary.today : summary.tomorrow;
+                const bStatus = currentSlot?.breakfast_status;
+                const isOpen = bStatus ? bStatus.is_open : true;
+                const bUnit = summary?.meal_rules?.breakfast_unit ?? 0.5;
+                const allowGuest = summary?.meal_rules?.allow_guest_meals ?? true;
+                const maxGuest = summary?.meal_rules?.max_guest_per_meal ?? 3;
 
-              {/* Lunch */}
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  দুপুরের খাবার (Lunch)
-                </label>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setLunch(0.0)}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
-                      lunch === 0 ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    বন্ধ (0)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLunch(1.0)}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
-                      lunch === 1.0 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    চালু (1.0)
-                  </button>
-                </div>
-              </div>
+                return (
+                  <div className={`p-4 rounded-2xl border transition ${
+                    isOpen ? "border-slate-200 bg-slate-50/50" : "border-slate-200 bg-slate-100/60 opacity-85"
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Coffee className="w-3.5 h-3.5 text-amber-600" /> সকালের নাস্তা
+                      </label>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                        isOpen ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                      }`}>
+                        {isOpen ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                        {bStatus ? bStatus.message : "সময় শেষ"}
+                      </span>
+                    </div>
 
-              {/* Dinner */}
-              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  রাতের খাবার (Dinner)
-                </label>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDinner(0.0)}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
-                      dinner === 0 ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    বন্ধ (0)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDinner(1.0)}
-                    className={`flex-1 py-2 text-xs font-bold rounded-xl border transition ${
-                      dinner === 1.0 ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    চালু (1.0)
-                  </button>
-                </div>
-              </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={!isOpen}
+                        onClick={() => setBreakfast(0.0)}
+                        className={`flex-1 py-2 text-xs font-bold rounded-xl border transition cursor-pointer disabled:cursor-not-allowed ${
+                          breakfast === 0
+                            ? "bg-slate-800 text-white border-slate-800 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        বন্ধ (0)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!isOpen}
+                        onClick={() => setBreakfast(bUnit)}
+                        className={`flex-1 py-2 text-xs font-bold rounded-xl border transition cursor-pointer disabled:cursor-not-allowed ${
+                          breakfast > 0
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        চালু ({bUnit})
+                      </button>
+                    </div>
+
+                    {/* Guest Breakfast */}
+                    {allowGuest && (
+                      <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                          <Users className="w-3 h-3 text-slate-400" /> মেহমান:
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={!isOpen || guestBreakfast <= 0}
+                            onClick={() => setGuestBreakfast(Math.max(0, guestBreakfast - 1))}
+                            className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="w-5 text-center text-xs font-bold text-slate-800">
+                            {guestBreakfast}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={!isOpen || guestBreakfast >= maxGuest}
+                            onClick={() => setGuestBreakfast(Math.min(maxGuest, guestBreakfast + 1))}
+                            className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* 2. Lunch */}
+              {(() => {
+                const currentSlot = selectedDay === "today" ? summary.today : summary.tomorrow;
+                const lStatus = currentSlot?.lunch_status;
+                const isOpen = lStatus ? lStatus.is_open : true;
+                const allowGuest = summary?.meal_rules?.allow_guest_meals ?? true;
+                const maxGuest = summary?.meal_rules?.max_guest_per_meal ?? 3;
+
+                return (
+                  <div className={`p-4 rounded-2xl border transition ${
+                    isOpen ? "border-slate-200 bg-slate-50/50" : "border-slate-200 bg-slate-100/60 opacity-85"
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sun className="w-3.5 h-3.5 text-amber-500" /> দুপুরের খাবার
+                      </label>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                        isOpen ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                      }`}>
+                        {isOpen ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                        {lStatus ? lStatus.message : "সময় শেষ"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={!isOpen}
+                        onClick={() => setLunch(0.0)}
+                        className={`flex-1 py-2 text-xs font-bold rounded-xl border transition cursor-pointer disabled:cursor-not-allowed ${
+                          lunch === 0
+                            ? "bg-slate-800 text-white border-slate-800 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        বন্ধ (0)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!isOpen}
+                        onClick={() => setLunch(1.0)}
+                        className={`flex-1 py-2 text-xs font-bold rounded-xl border transition cursor-pointer disabled:cursor-not-allowed ${
+                          lunch === 1.0
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        চালু (1.0)
+                      </button>
+                    </div>
+
+                    {/* Guest Lunch */}
+                    {allowGuest && (
+                      <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                          <Users className="w-3 h-3 text-slate-400" /> মেহমান:
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={!isOpen || guestLunch <= 0}
+                            onClick={() => setGuestLunch(Math.max(0, guestLunch - 1))}
+                            className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="w-5 text-center text-xs font-bold text-slate-800">
+                            {guestLunch}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={!isOpen || guestLunch >= maxGuest}
+                            onClick={() => setGuestLunch(Math.min(maxGuest, guestLunch + 1))}
+                            className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* 3. Dinner */}
+              {(() => {
+                const currentSlot = selectedDay === "today" ? summary.today : summary.tomorrow;
+                const dStatus = currentSlot?.dinner_status;
+                const isOpen = dStatus ? dStatus.is_open : true;
+                const allowGuest = summary?.meal_rules?.allow_guest_meals ?? true;
+                const maxGuest = summary?.meal_rules?.max_guest_per_meal ?? 3;
+
+                return (
+                  <div className={`p-4 rounded-2xl border transition ${
+                    isOpen ? "border-slate-200 bg-slate-50/50" : "border-slate-200 bg-slate-100/60 opacity-85"
+                  }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Moon className="w-3.5 h-3.5 text-indigo-500" /> রাতের খাবার
+                      </label>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                        isOpen ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                      }`}>
+                        {isOpen ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                        {dStatus ? dStatus.message : "সময় শেষ"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={!isOpen}
+                        onClick={() => setDinner(0.0)}
+                        className={`flex-1 py-2 text-xs font-bold rounded-xl border transition cursor-pointer disabled:cursor-not-allowed ${
+                          dinner === 0
+                            ? "bg-slate-800 text-white border-slate-800 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        বন্ধ (0)
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!isOpen}
+                        onClick={() => setDinner(1.0)}
+                        className={`flex-1 py-2 text-xs font-bold rounded-xl border transition cursor-pointer disabled:cursor-not-allowed ${
+                          dinner === 1.0
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        চালু (1.0)
+                      </button>
+                    </div>
+
+                    {/* Guest Dinner */}
+                    {allowGuest && (
+                      <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                          <Users className="w-3 h-3 text-slate-400" /> মেহমান:
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={!isOpen || guestDinner <= 0}
+                            onClick={() => setGuestDinner(Math.max(0, guestDinner - 1))}
+                            className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="w-5 text-center text-xs font-bold text-slate-800">
+                            {guestDinner}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={!isOpen || guestDinner >= maxGuest}
+                            onClick={() => setGuestDinner(Math.min(maxGuest, guestDinner + 1))}
+                            className="w-6 h-6 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Total calculated & Submit */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
-              <div className="text-sm font-semibold text-slate-700">
-                আজ মোট মিল হবে: <span className="text-emerald-600 font-extrabold text-lg">{(breakfast + lunch + dinner).toFixed(1)} টি</span>
+              <div className="text-xs font-semibold text-slate-600">
+                {selectedDay === "today" ? "আজ" : "কাল"} মোট মিল হবে:{" "}
+                <span className="text-emerald-700 font-black text-lg">
+                  {(breakfast + lunch + dinner + guestBreakfast + guestLunch + guestDinner).toFixed(1)} টি
+                </span>
+                {(guestBreakfast + guestLunch + guestDinner > 0) && (
+                  <span className="ml-2 text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                    (মেহমান: {(guestBreakfast + guestLunch + guestDinner).toFixed(1)} টি)
+                  </span>
+                )}
               </div>
               <button
                 type="submit"
                 disabled={savingMeal}
-                className="w-full sm:w-auto px-6 py-3 bg-emerald-600 text-white font-bold rounded-2xl shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full sm:w-auto px-6 py-3 bg-emerald-600 text-white font-bold rounded-2xl shadow-md hover:bg-emerald-700 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
-                {savingMeal ? "সংরক্ষণ হচ্ছে..." : "মিল স্ট্যাটাস আপডেট করুন"}
+                {savingMeal ? "সংরক্ষণ হচ্ছে..." : "মিল পছন্দ সংরক্ষণ করুন"}
               </button>
             </div>
           </form>

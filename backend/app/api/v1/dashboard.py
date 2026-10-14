@@ -1,5 +1,6 @@
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type, datetime, time as time_type, timedelta
+from zoneinfo import ZoneInfo
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +16,12 @@ from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
-from app.schemas.dashboard import DashboardStats, MemberPersonalSummary, TodayMealDetail
+from app.schemas.dashboard import (
+    DashboardStats,
+    MemberPersonalSummary,
+    TodayMealDetail,
+    SlotStatus,
+)
 
 router = APIRouter(prefix="/messes/{mess_id}/dashboard", tags=["Dashboard"])
 
@@ -197,6 +203,55 @@ async def get_member_personal_summary(
     mem_stmt = select(func.count(Membership.id)).where(Membership.mess_id == mess_id)
     active_member_count = (await db.execute(mem_stmt)).scalar() or 1
 
+    # Timezone-aware date & time in Asia/Dhaka
+    tz = ZoneInfo("Asia/Dhaka")
+    now_dhaka = datetime.now(tz)
+    today = now_dhaka.date()
+    tomorrow = today + timedelta(days=1)
+    current_time = now_dhaka.time()
+
+    rules = dict(mess.meal_rules or {
+        "breakfast_unit": 0.5,
+        "breakfast_cutoff_time": "22:00",
+        "breakfast_cutoff_prev_day": True,
+        "lunch_cutoff_time": "09:00",
+        "dinner_cutoff_time": "17:00",
+        "allow_guest_meals": True,
+        "max_guest_per_meal": 3,
+    })
+
+    def parse_t(t_str, dh, dm):
+        try:
+            p = t_str.split(":")
+            return time_type(int(p[0]), int(p[1]))
+        except Exception:
+            return time_type(dh, dm)
+
+    b_cutoff_str = rules.get("breakfast_cutoff_time", "22:00")
+    b_prev_day = rules.get("breakfast_cutoff_prev_day", True)
+    l_cutoff_str = rules.get("lunch_cutoff_time", "09:00")
+    d_cutoff_str = rules.get("dinner_cutoff_time", "17:00")
+
+    b_time = parse_t(b_cutoff_str, 22, 0)
+    l_time = parse_t(l_cutoff_str, 9, 0)
+    d_time = parse_t(d_cutoff_str, 17, 0)
+
+    # Today Breakfast Status
+    if b_prev_day:
+        today_b_open = False
+        today_b_msg = f"সময় শেষ (গতকাল রাত {b_cutoff_str})"
+    else:
+        today_b_open = current_time < b_time
+        today_b_msg = f"কাট-অফ: সকাল {b_cutoff_str}" if today_b_open else f"সময় শেষ (সকাল {b_cutoff_str})"
+
+    # Today Lunch Status
+    today_l_open = current_time < l_time
+    today_l_msg = f"কাট-অফ: সকাল {l_cutoff_str}" if today_l_open else f"সময় শেষ (সকাল {l_cutoff_str})"
+
+    # Today Dinner Status
+    today_d_open = current_time < d_time
+    today_d_msg = f"কাট-অফ: বিকাল {d_cutoff_str}" if today_d_open else f"সময় শেষ (বিকাল {d_cutoff_str})"
+
     # Today's meal for current user
     today_stmt = select(Meal).where(
         Meal.mess_id == mess_id,
@@ -204,20 +259,78 @@ async def get_member_personal_summary(
         Meal.date == today,
     )
     my_today_obj = (await db.execute(today_stmt)).scalar_one_or_none()
-    
-    # Check if dinner cutoff passed (after 17:00 / 5 PM)
-    now = datetime.now()
-    can_edit_dinner = now.hour < 17
 
     today_detail = TodayMealDetail(
         date=str(today),
         breakfast=my_today_obj.breakfast if my_today_obj else 0.0,
         lunch=my_today_obj.lunch if my_today_obj else 1.0,
         dinner=my_today_obj.dinner if my_today_obj else 1.0,
+        guest_breakfast=my_today_obj.guest_breakfast if my_today_obj else 0.0,
+        guest_lunch=my_today_obj.guest_lunch if my_today_obj else 0.0,
+        guest_dinner=my_today_obj.guest_dinner if my_today_obj else 0.0,
         is_off=my_today_obj.is_off if my_today_obj else False,
         total_meals=my_today_obj.total_meals if my_today_obj else 2.0,
-        dinner_cutoff_time="17:00 (বিকাল ৫টা)",
-        can_edit_dinner=can_edit_dinner,
+        breakfast_status=SlotStatus(
+            is_open=today_b_open,
+            cutoff_time_str=b_cutoff_str,
+            message=today_b_msg,
+        ),
+        lunch_status=SlotStatus(
+            is_open=today_l_open,
+            cutoff_time_str=l_cutoff_str,
+            message=today_l_msg,
+        ),
+        dinner_status=SlotStatus(
+            is_open=today_d_open,
+            cutoff_time_str=d_cutoff_str,
+            message=today_d_msg,
+        ),
+        dinner_cutoff_time=f"{d_cutoff_str} (বিকাল)",
+        can_edit_dinner=today_d_open,
+    )
+
+    # Tomorrow's meal for advance planning
+    tomorrow_stmt = select(Meal).where(
+        Meal.mess_id == mess_id,
+        Meal.user_id == current_user.id,
+        Meal.date == tomorrow,
+    )
+    my_tomorrow_obj = (await db.execute(tomorrow_stmt)).scalar_one_or_none()
+
+    if b_prev_day:
+        tomorrow_b_open = current_time < b_time
+        tomorrow_b_msg = f"কাট-অফ: আজ রাত {b_cutoff_str}" if tomorrow_b_open else f"সময় শেষ (আজ রাত {b_cutoff_str})"
+    else:
+        tomorrow_b_open = True
+        tomorrow_b_msg = f"কাট-অফ: কাল সকাল {b_cutoff_str}"
+
+    tomorrow_detail = TodayMealDetail(
+        date=str(tomorrow),
+        breakfast=my_tomorrow_obj.breakfast if my_tomorrow_obj else 0.0,
+        lunch=my_tomorrow_obj.lunch if my_tomorrow_obj else 1.0,
+        dinner=my_tomorrow_obj.dinner if my_tomorrow_obj else 1.0,
+        guest_breakfast=my_tomorrow_obj.guest_breakfast if my_tomorrow_obj else 0.0,
+        guest_lunch=my_tomorrow_obj.guest_lunch if my_tomorrow_obj else 0.0,
+        guest_dinner=my_tomorrow_obj.guest_dinner if my_tomorrow_obj else 0.0,
+        is_off=my_tomorrow_obj.is_off if my_tomorrow_obj else False,
+        total_meals=my_tomorrow_obj.total_meals if my_tomorrow_obj else 2.0,
+        breakfast_status=SlotStatus(
+            is_open=tomorrow_b_open,
+            cutoff_time_str=b_cutoff_str,
+            message=tomorrow_b_msg,
+        ),
+        lunch_status=SlotStatus(
+            is_open=True,
+            cutoff_time_str=l_cutoff_str,
+            message=f"কাট-অফ: কাল সকাল {l_cutoff_str}",
+        ),
+        dinner_status=SlotStatus(
+            is_open=True,
+            cutoff_time_str=d_cutoff_str,
+            message=f"কাট-অফ: কাল বিকাল {d_cutoff_str}",
+        ),
+        dinner_cutoff_time=f"{d_cutoff_str} (কাল বিকাল)",
+        can_edit_dinner=True,
     )
 
     # Month meals
@@ -331,6 +444,8 @@ async def get_member_personal_summary(
         mess_total_deposit=round(mess_total_deposit, 2),
         active_member_count=active_member_count,
         today=today_detail,
+        tomorrow=tomorrow_detail,
+        meal_rules=rules,
         my_deposits=my_deposits,
         recent_bazars=recent_bazars,
     )

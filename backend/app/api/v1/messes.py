@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, attributes
 
 from app.db.session import get_db
 from app.models.user import User
@@ -23,6 +23,7 @@ from app.schemas.mess import (
     JoinMessRequest,
     MembershipResponse,
     MembershipRoleUpdate,
+    MealRulesUpdate,
 )
 
 router = APIRouter(prefix="/messes", tags=["Messes"])
@@ -352,3 +353,38 @@ async def update_member_role(
         joined_at=target_mem.joined_at,
         user=target_mem.user,
     )
+
+@router.patch("/{mess_id}/meal-rules")
+async def update_meal_rules(
+    mess_id: uuid.UUID,
+    rules_in: MealRulesUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem_result = await db.execute(
+        select(Membership).where(Membership.mess_id == mess_id, Membership.user_id == current_user.id)
+    )
+    current_mem = mem_result.scalar_one_or_none()
+    if not current_mem or current_mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="শুধুমাত্র মেস ম্যানেজার বা মালিক মিল রুলস পরিবর্তন করতে পারবেন",
+        )
+
+    mess_result = await db.execute(select(Mess).where(Mess.id == mess_id))
+    mess = mess_result.scalar_one_or_none()
+    if not mess:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mess not found")
+
+    current_rules = dict(mess.meal_rules or {})
+    for field, val in rules_in.model_dump(exclude_unset=True).items():
+        if val is not None:
+            current_rules[field] = val
+
+    mess.meal_rules = current_rules
+    attributes.flag_modified(mess, "meal_rules")
+
+    await db.commit()
+    await db.refresh(mess)
+    return {"message": "মিল রুলস সফলভাবে আপডেট হয়েছে", "meal_rules": mess.meal_rules}
+

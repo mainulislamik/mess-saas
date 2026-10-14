@@ -7,6 +7,9 @@ class MealItemBase(BaseModel):
     breakfast: float = Field(default=0.0, ge=0.0, le=5.0)
     lunch: float = Field(default=1.0, ge=0.0, le=5.0)
     dinner: float = Field(default=1.0, ge=0.0, le=5.0)
+    guest_breakfast: float = Field(default=0.0, ge=0.0, le=20.0)
+    guest_lunch: float = Field(default=0.0, ge=0.0, le=20.0)
+    guest_dinner: float = Field(default=0.0, ge=0.0, le=20.0)
     is_off: bool = False
     notes: Optional[str] = None
 

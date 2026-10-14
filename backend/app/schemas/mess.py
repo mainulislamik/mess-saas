@@ -45,12 +45,22 @@ class MessResponse(MessBase):
     is_active: bool
     created_at: datetime
     my_role: Optional[MemberRole] = None
+    meal_rules: Optional[dict] = None
 
     class Config:
         from_attributes = True
 
 class MessDetailResponse(MessResponse):
     memberships: List[MembershipResponse] = []
+
+class MealRulesUpdate(BaseModel):
+    breakfast_unit: Optional[float] = None
+    breakfast_cutoff_time: Optional[str] = None
+    breakfast_cutoff_prev_day: Optional[bool] = None
+    lunch_cutoff_time: Optional[str] = None
+    dinner_cutoff_time: Optional[str] = None
+    allow_guest_meals: Optional[bool] = None
+    max_guest_per_meal: Optional[int] = None
 
 class JoinMessRequest(BaseModel):
     code: str
