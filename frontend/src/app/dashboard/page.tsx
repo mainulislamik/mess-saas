@@ -19,6 +19,7 @@ import {
   ArrowDownRight,
   Clock,
   Sparkles,
+  Table,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -104,6 +105,12 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex flex-wrap gap-2.5">
+              <Link
+                href="/dashboard/master-sheet"
+                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl text-sm shadow-md transition-all inline-flex items-center gap-1.5"
+              >
+                <Table className="w-4 h-4" /> মেস মাস্টার শিট
+              </Link>
               <Link
                 href="/dashboard/meals"
                 className="px-4 py-2 bg-white text-emerald-900 rounded-xl text-sm font-bold shadow hover:bg-emerald-50 transition-all inline-flex items-center gap-1.5"

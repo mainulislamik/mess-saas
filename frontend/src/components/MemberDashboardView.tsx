@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -24,6 +25,7 @@ import {
   Coffee,
   Sun,
   Moon,
+  Table,
 } from "lucide-react";
 
 export default function MemberDashboardView() {
@@ -188,6 +190,14 @@ export default function MemberDashboardView() {
             <p className="text-emerald-100/80 text-sm mt-1">
               {summary.mess_name} • আসন: {summary.seat_label || "জেনারেল"} • ফোন: {summary.phone}
             </p>
+            <div className="mt-3">
+              <Link
+                href="/dashboard/master-sheet"
+                className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black rounded-xl shadow-md inline-flex items-center gap-1.5 transition"
+              >
+                <Table className="w-3.5 h-3.5" /> মেস মাস্টার শিট দেখুন (লাইভ)
+              </Link>
+            </div>
           </div>
 
           {/* Balance Highlight Card */}

@@ -22,6 +22,7 @@ import {
   Sparkles,
   ArrowRight,
   CreditCard,
+  Table,
 } from "lucide-react";
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -66,6 +67,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
     portalMode === "manager"
       ? [
           { href: "/dashboard", label: "ড্যাশবোর্ড", icon: LayoutDashboard },
+          { href: "/dashboard/master-sheet", label: "মেস মাস্টার শিট", icon: Table },
           { href: "/dashboard/meals", label: "মিল কাউন্ট ও শিট", icon: CalendarCheck },
           { href: "/dashboard/bazar", label: "বাজার ও অন্যান্য খরচ", icon: ShoppingBag },
           { href: "/dashboard/closing", label: "মাস সমাপনী (Closing)", icon: FileCheck2 },
@@ -73,6 +75,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         ]
       : [
           { href: "/dashboard", label: "আমার খতিয়ান ও হিসাব", icon: LayoutDashboard },
+          { href: "/dashboard/master-sheet", label: "মেস মাস্টার শিট", icon: Table },
           { href: "/dashboard/meals", label: "আমার মিল রিকোয়েস্ট", icon: CalendarCheck },
           { href: "/dashboard/bazar", label: "বাজার শিডিউল ও তালিকা", icon: ShoppingBag },
         ];
