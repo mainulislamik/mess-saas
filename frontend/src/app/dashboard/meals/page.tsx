@@ -76,7 +76,17 @@ export default function MealsPage() {
           item.lunch = 0;
           item.dinner = 0;
         }
-        item.total_meals = item.is_off ? 0 : Number(item.breakfast) + Number(item.lunch) + Number(item.dinner);
+        item.total_meals = item.is_off
+          ? 0
+          : round(
+              Number(item.breakfast) +
+                Number(item.lunch) +
+                Number(item.dinner) +
+                Number(item.guest_breakfast || 0) +
+                Number(item.guest_lunch || 0) +
+                Number(item.guest_dinner || 0),
+              2
+            );
         return item;
       }
       return m;

@@ -138,17 +138,18 @@ async def get_monthly_meal_summary(
     user_totals = {}
     for m in meals:
         if m.user_id not in user_totals:
-            user_totals[m.user_id] = {"brk": 0.0, "lunch": 0.0, "dinner": 0.0, "total": 0.0}
+            user_totals[m.user_id] = {"brk": 0.0, "lunch": 0.0, "dinner": 0.0, "guest": 0.0, "total": 0.0}
         if not m.is_off:
             user_totals[m.user_id]["brk"] += m.breakfast
             user_totals[m.user_id]["lunch"] += m.lunch
             user_totals[m.user_id]["dinner"] += m.dinner
-            user_totals[m.user_id]["total"] += (m.breakfast + m.lunch + m.dinner)
+            user_totals[m.user_id]["guest"] += (m.guest_breakfast + m.guest_lunch + m.guest_dinner)
+            user_totals[m.user_id]["total"] += m.total_meals
 
     summary = []
     for m in memberships:
         u = m.user
-        tot = user_totals.get(m.user_id, {"brk": 0.0, "lunch": 0.0, "dinner": 0.0, "total": 0.0})
+        tot = user_totals.get(m.user_id, {"brk": 0.0, "lunch": 0.0, "dinner": 0.0, "guest": 0.0, "total": 0.0})
         summary.append(
             MemberMealSummary(
                 user_id=m.user_id,
@@ -158,6 +159,7 @@ async def get_monthly_meal_summary(
                 breakfast_count=round(tot["brk"], 2),
                 lunch_count=round(tot["lunch"], 2),
                 dinner_count=round(tot["dinner"], 2),
+                guest_meals=round(tot["guest"], 2),
                 total_meals=round(tot["total"], 2),
             )
         )

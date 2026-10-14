@@ -69,7 +69,7 @@ async def calculate_monthly_closing_data(
     total_meals = 0.0
     for m in meals:
         if not m.is_off:
-            t = m.breakfast + m.lunch + m.dinner
+            t = m.total_meals
             user_meals[m.user_id] = user_meals.get(m.user_id, 0.0) + t
             total_meals += t
 
@@ -197,10 +197,12 @@ async def finalize_closing_by_path(
 @router.post("/", response_model=MonthlyClosingResponse, include_in_schema=False)
 async def finalize_closing(
     mess_id: uuid.UUID,
-    month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+    month: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if not month:
+        month = datetime.utcnow().strftime("%Y-%m")
     mem = await get_membership_for_mess(mess_id, current_user, db)
     if mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
         raise HTTPException(

@@ -43,6 +43,7 @@ class MemberMealSummary(BaseModel):
     breakfast_count: float
     lunch_count: float
     dinner_count: float
+    guest_meals: float = 0.0
     total_meals: float
 
 class DailyMealMatrix(BaseModel):

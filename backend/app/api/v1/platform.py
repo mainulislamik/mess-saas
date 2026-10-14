@@ -76,7 +76,23 @@ async def get_platform_overview(
     active_users = (await db.execute(select(func.count(User.id)).where(User.is_active == True))).scalar_one() or 0
 
     # Financial and activity stats
-    total_meals = (await db.execute(select(func.sum(Meal.breakfast * 0.5 + Meal.lunch + Meal.dinner)))).scalar_one() or 0.0
+    total_meals = (
+        await db.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        Meal.breakfast
+                        + Meal.guest_breakfast
+                        + Meal.lunch
+                        + Meal.guest_lunch
+                        + Meal.dinner
+                        + Meal.guest_dinner
+                    ),
+                    0.0,
+                )
+            ).where(Meal.is_off == False)
+        )
+    ).scalar_one() or 0.0
     total_bazar = (await db.execute(select(func.sum(Bazar.amount)))).scalar_one() or 0.0
     total_deposits = (await db.execute(select(func.sum(Deposit.amount)))).scalar_one() or 0.0
     total_rev = (await db.execute(select(func.sum(SubscriptionPayment.amount)).where(SubscriptionPayment.status == "approved"))).scalar_one() or 0.0

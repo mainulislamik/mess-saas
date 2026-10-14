@@ -79,6 +79,8 @@ async def create_mess(
 
 @router.get("", response_model=List[MessResponse])
 @router.get("/", response_model=List[MessResponse], include_in_schema=False)
+@router.get("/my", response_model=List[MessResponse], include_in_schema=False)
+@router.get("/my/", response_model=List[MessResponse], include_in_schema=False)
 async def get_my_messes(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -353,6 +355,42 @@ async def update_member_role(
         joined_at=target_mem.joined_at,
         user=target_mem.user,
     )
+
+@router.get("/{mess_id}/meal-rules")
+async def get_meal_rules(
+    mess_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem_result = await db.execute(
+        select(Membership).where(Membership.mess_id == mess_id, Membership.user_id == current_user.id)
+    )
+    current_mem = mem_result.scalar_one_or_none()
+    if not current_mem:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="আপনি এই মেসের সদস্য নন",
+        )
+
+    mess_result = await db.execute(select(Mess).where(Mess.id == mess_id))
+    mess = mess_result.scalar_one_or_none()
+    if not mess:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="মেস পাওয়া যায়নি")
+
+    defaults = {
+        "breakfast_unit": 0.5,
+        "breakfast_cutoff_time": "22:00",
+        "breakfast_cutoff_prev_day": True,
+        "lunch_cutoff_time": "09:00",
+        "dinner_cutoff_time": "17:00",
+        "allow_guest_meals": True,
+        "max_guest_per_meal": 3,
+    }
+    rules = dict(defaults)
+    if mess.meal_rules:
+        rules.update(mess.meal_rules)
+
+    return rules
 
 @router.patch("/{mess_id}/meal-rules")
 async def update_meal_rules(
