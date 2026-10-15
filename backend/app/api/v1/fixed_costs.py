@@ -58,7 +58,9 @@ async def list_fixed_costs(
             title=c.title,
             amount=c.amount,
             split_type=c.split_type,
+            sub_type=c.sub_type,
             cost_date=c.cost_date,
+            billing_date=c.cost_date,
             meta_data=c.meta_data,
             notes=c.notes,
             created_at=c.created_at,
@@ -107,6 +109,7 @@ async def create_fixed_cost(
             detail="Only Owner or Manager can manage fixed costs and utilities",
         )
 
+    effective_date = cost_in.cost_date or cost_in.billing_date
     cost = FixedCost(
         mess_id=mess_id,
         month=cost_in.month,
@@ -115,7 +118,7 @@ async def create_fixed_cost(
         amount=cost_in.amount,
         split_type=cost_in.split_type,
         sub_type=cost_in.sub_type,
-        cost_date=cost_in.cost_date,
+        cost_date=effective_date,
         meta_data=cost_in.meta_data,
         notes=cost_in.notes,
     )
@@ -133,6 +136,7 @@ async def create_fixed_cost(
         split_type=cost.split_type,
         sub_type=cost.sub_type,
         cost_date=cost.cost_date,
+        billing_date=cost.cost_date,
         meta_data=cost.meta_data,
         notes=cost.notes,
         created_at=cost.created_at,
@@ -169,8 +173,9 @@ async def update_fixed_cost(
         cost.split_type = cost_in.split_type
     if cost_in.sub_type is not None:
         cost.sub_type = cost_in.sub_type
-    if cost_in.cost_date is not None:
-        cost.cost_date = cost_in.cost_date
+    eff_update_date = cost_in.cost_date or cost_in.billing_date
+    if eff_update_date is not None:
+        cost.cost_date = eff_update_date
     if cost_in.meta_data is not None:
         cost.meta_data = cost_in.meta_data
     if cost_in.notes is not None:
@@ -189,6 +194,7 @@ async def update_fixed_cost(
         split_type=cost.split_type,
         sub_type=cost.sub_type,
         cost_date=cost.cost_date,
+        billing_date=cost.cost_date,
         meta_data=cost.meta_data,
         notes=cost.notes,
         created_at=cost.created_at,
@@ -213,3 +219,49 @@ async def delete_fixed_cost(
     await db.delete(cost)
     await db.commit()
     return None
+
+# Standalone fallback router for /fixed-costs (handles direct or legacy calls)
+root_router = APIRouter(prefix="/fixed-costs", tags=["Fixed Costs Direct"])
+
+@root_router.get("", response_model=FixedCostMonthlySummary)
+@root_router.get("/", response_model=FixedCostMonthlySummary, include_in_schema=False)
+async def list_fixed_costs_root(
+    mess_id: uuid.UUID = Query(...),
+    month: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_fixed_costs(mess_id=mess_id, month=month, current_user=current_user, db=db)
+
+@root_router.post("", response_model=FixedCostResponse, status_code=status.HTTP_201_CREATED)
+@root_router.post("/", response_model=FixedCostResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+async def create_fixed_cost_root(
+    cost_in: FixedCostCreate,
+    mess_id: uuid.UUID = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await create_fixed_cost(mess_id=mess_id, cost_in=cost_in, current_user=current_user, db=db)
+
+@root_router.delete("/{cost_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_fixed_cost_root(
+    cost_id: uuid.UUID,
+    mess_id: Optional[uuid.UUID] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(FixedCost).where(FixedCost.id == cost_id)
+    if mess_id:
+        stmt = stmt.where(FixedCost.mess_id == mess_id)
+    cost = (await db.execute(stmt)).scalar_one_or_none()
+    if not cost:
+        raise HTTPException(status_code=404, detail="Fixed cost record not found")
+
+    mem = await get_membership_for_mess(cost.mess_id, current_user, db)
+    if mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="Only Owner or Manager can delete fixed costs")
+
+    await db.delete(cost)
+    await db.commit()
+    return None
+

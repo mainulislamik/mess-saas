@@ -47,6 +47,7 @@ interface UtilityItem {
   amount: number;
   split_type: string;
   sub_type?: string | null;
+  cost_date?: string | null;
   billing_date?: string | null;
   notes?: string | null;
   meta_data?: any;
@@ -107,7 +108,7 @@ export default function RentUtilitiesPage() {
       const targetMonth = month || new Date().toISOString().slice(0, 7);
       const [membersRes, utilsRes] = await Promise.all([
         api.get(`/messes/${currentMess.id}/members`),
-        api.get(`/fixed-costs/?mess_id=${currentMess.id}&month=${targetMonth}`),
+        api.get(`/messes/${currentMess.id}/fixed-costs?month=${targetMonth}`),
       ]);
 
       const formattedMembers = (membersRes.data || []).map((m: any) => ({
@@ -121,7 +122,10 @@ export default function RentUtilitiesPage() {
       }));
 
       setMembers(formattedMembers);
-      setUtilities(utilsRes.data || []);
+      const items = Array.isArray(utilsRes.data)
+        ? utilsRes.data
+        : (utilsRes.data?.items || []);
+      setUtilities(items);
     } catch (err: any) {
       console.error(err);
       setStatusMessage({
@@ -202,11 +206,12 @@ export default function RentUtilitiesPage() {
         title: modalTitle.trim(),
         amount: parseFloat(modalAmount) || 0,
         split_type: "equal",
+        cost_date: modalDate || null,
         billing_date: modalDate || null,
         notes: modalNotes.trim() || null,
       };
 
-      await api.post(`/fixed-costs/?mess_id=${currentMess.id}`, payload);
+      await api.post(`/messes/${currentMess.id}/fixed-costs`, payload);
       setShowAddModal(false);
       setModalTitle("");
       setModalAmount("");
@@ -230,10 +235,10 @@ export default function RentUtilitiesPage() {
 
   // Delete Utility
   const handleDeleteUtility = async (id: string, title: string) => {
-    if (!isManagerOrOwner) return;
+    if (!isManagerOrOwner || !currentMess?.id) return;
     if (!confirm(`আপনি কি নিশ্চিত যে "${title}" বিলটি মুছে ফেলতে চান?`)) return;
     try {
-      await api.delete(`/fixed-costs/${id}`);
+      await api.delete(`/messes/${currentMess.id}/fixed-costs/${id}`);
       setUtilities((prev) => prev.filter((u) => u.id !== id));
       setStatusMessage({
         type: "success",
@@ -280,8 +285,9 @@ export default function RentUtilitiesPage() {
   }, [gasItems]);
 
   const daysSinceLpg = useMemo(() => {
-    if (!latestLpgCylinder?.billing_date) return null;
-    const diffTime = Math.abs(new Date().getTime() - new Date(latestLpgCylinder.billing_date).getTime());
+    const d = latestLpgCylinder?.cost_date || latestLpgCylinder?.billing_date;
+    if (!d) return null;
+    const diffTime = Math.abs(new Date().getTime() - new Date(d).getTime());
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   }, [latestLpgCylinder]);
 
@@ -711,10 +717,10 @@ export default function RentUtilitiesPage() {
                           <Icon className="w-3.5 h-3.5" />
                           <span>{cat.label}</span>
                         </span>
-                        {item.billing_date && (
+                        {(item.cost_date || item.billing_date) && (
                           <span className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
                             <Clock className="w-3 h-3" />
-                            {item.billing_date}
+                            {item.cost_date || item.billing_date}
                           </span>
                         )}
                       </div>
@@ -823,7 +829,7 @@ export default function RentUtilitiesPage() {
                     {latestLpgCylinder.title} (৳{latestLpgCylinder.amount})
                   </h4>
                   <p className="text-xs text-slate-600">
-                    ইনস্টল/ক্রয় তারিখ: <span className="font-mono font-semibold">{latestLpgCylinder.billing_date || "—"}</span>
+                    ইনস্টল/ক্রয় তারিখ: <span className="font-mono font-semibold">{latestLpgCylinder.cost_date || latestLpgCylinder.billing_date || "—"}</span>
                   </p>
                 </div>
 
@@ -854,7 +860,7 @@ export default function RentUtilitiesPage() {
                     <div key={g.id} className="p-3 bg-white flex items-center justify-between hover:bg-slate-50">
                       <div>
                         <span className="font-semibold text-slate-800 text-sm">{g.title}</span>
-                        <div className="text-xs text-slate-400 font-mono mt-0.5">{g.billing_date || "তারিখ নেই"}</div>
+                        <div className="text-xs text-slate-400 font-mono mt-0.5">{g.cost_date || g.billing_date || "তারিখ নেই"}</div>
                       </div>
                       <div className="text-right">
                         <span className="font-bold text-slate-800">৳{g.amount}</span>
@@ -923,7 +929,7 @@ export default function RentUtilitiesPage() {
                       <div>
                         <span className="font-semibold text-slate-800 text-sm">{e.title}</span>
                         {e.notes && <p className="text-xs text-slate-500 mt-0.5">{e.notes}</p>}
-                        <div className="text-xs text-slate-400 font-mono mt-0.5">{e.billing_date || "তারিখ নেই"}</div>
+                        <div className="text-xs text-slate-400 font-mono mt-0.5">{e.cost_date || e.billing_date || "তারিখ নেই"}</div>
                       </div>
                       <div className="text-right">
                         <span className="font-bold text-slate-800">৳{e.amount}</span>

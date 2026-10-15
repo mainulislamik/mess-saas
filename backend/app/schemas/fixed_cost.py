@@ -12,6 +12,7 @@ class FixedCostCreate(BaseModel):
     split_type: SplitType = SplitType.EQUAL
     sub_type: Optional[str] = None
     cost_date: Optional[date_type] = None
+    billing_date: Optional[date_type] = None
     meta_data: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
 
@@ -22,6 +23,7 @@ class FixedCostUpdate(BaseModel):
     split_type: Optional[SplitType] = None
     sub_type: Optional[str] = None
     cost_date: Optional[date_type] = None
+    billing_date: Optional[date_type] = None
     meta_data: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
 
@@ -35,6 +37,7 @@ class FixedCostResponse(BaseModel):
     split_type: SplitType
     sub_type: Optional[str] = None
     cost_date: Optional[date_type] = None
+    billing_date: Optional[date_type] = None
     meta_data: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
     created_at: datetime
