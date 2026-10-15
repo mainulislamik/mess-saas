@@ -5,8 +5,7 @@ const urlsToCache = [
   '/dashboard/meals',
   '/dashboard/bazar',
   '/dashboard/menu',
-  '/dashboard/maid-gas',
-  '/dashboard/whatsapp',
+  '/dashboard/rent-utilities',
   '/login'
 ];
 

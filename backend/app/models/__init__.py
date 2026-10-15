@@ -10,7 +10,6 @@ from app.models.closing import MonthlyClosing
 from app.models.platform import PlatformSetting, PlatformAnnouncement, SubscriptionPayment
 from app.models.menu import MealPoll, MealPollOption, MealPollVote, WeeklyMenuRoutine
 from app.models.maid_gas import MaidAttendance, GasLog
-from app.models.whatsapp import WhatsAppConfig
 
 __all__ = [
     "MemberRole",

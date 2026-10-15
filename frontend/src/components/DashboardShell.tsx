@@ -25,7 +25,6 @@ import {
   Table,
   UtensilsCrossed,
   Users2,
-  MessageSquare,
   Home,
 } from "lucide-react";
 
@@ -76,7 +75,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           { href: "/dashboard/bazar", label: "বাজার ও অন্যান্য খরচ", icon: ShoppingBag },
           { href: "/dashboard/rent-utilities", label: "বাড়িভাড়া ও ইউটিলিটি", icon: Home },
           { href: "/dashboard/menu", label: "খাবারের মেন্যু ও ভোট", icon: UtensilsCrossed },
-          { href: "/dashboard/whatsapp", label: "হোয়াটসঅ্যাপ ডাইজেস্ট বট", icon: MessageSquare },
           { href: "/dashboard/closing", label: "মাস সমাপনী (Closing)", icon: FileCheck2 },
           { href: "/dashboard/messes", label: "মেস সেটিংস ও সদস্য", icon: Building2 },
         ]
