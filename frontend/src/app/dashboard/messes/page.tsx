@@ -488,7 +488,7 @@ export default function MessSettingsPage() {
                   {members.map((m) => (
                     <tr key={m.user_id} className="hover:bg-slate-50/70 transition">
                       <td className="px-6 py-4 font-semibold text-slate-900">
-                        {m.user_name}
+                        {m.user_name || m.user?.name || "সদস্য"}
                         {m.user_id === user?.id && (
                           <span className="ml-2 text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
                             আপনি
@@ -496,7 +496,7 @@ export default function MessSettingsPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 font-mono text-slate-600 text-xs">
-                        {m.phone}
+                        {m.phone || m.user?.phone || "—"}
                       </td>
                       <td className="px-6 py-4">
                         <span

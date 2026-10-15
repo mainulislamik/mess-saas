@@ -32,6 +32,8 @@ class MembershipResponse(BaseModel):
     joined_at: datetime
     left_at: Optional[datetime] = None
     user: Optional[UserResponse] = None
+    user_name: Optional[str] = None
+    phone: Optional[str] = None
 
     class Config:
         from_attributes = True

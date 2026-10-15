@@ -292,6 +292,8 @@ async def get_mess_members(
             seat_label=m.seat_label,
             joined_at=m.joined_at,
             user=m.user,
+            user_name=m.user.name if m.user else "সদস্য",
+            phone=m.user.phone if m.user else "",
         )
         for m in memberships
     ]
@@ -354,6 +356,8 @@ async def update_member_role(
         seat_label=target_mem.seat_label,
         joined_at=target_mem.joined_at,
         user=target_mem.user,
+        user_name=target_mem.user.name if target_mem.user else "সদস্য",
+        phone=target_mem.user.phone if target_mem.user else "",
     )
 
 @router.get("/{mess_id}/meal-rules")

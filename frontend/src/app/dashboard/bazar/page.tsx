@@ -428,11 +428,21 @@ export default function BazarPage() {
                     required
                     className="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl bg-slate-50 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    {members.map((m) => (
-                      <option key={m.user_id} value={m.user_id}>
-                        {m.user_name} ({m.phone})
-                      </option>
-                    ))}
+                    {members.map((m) => {
+                      const name = m.user_name || m.user?.name || "সদস্য";
+                      const roleLabel =
+                        m.role === "owner"
+                          ? "মেস ম্যানেজার / সদস্য"
+                          : m.role === "manager"
+                          ? "মেস ম্যানেজার / সদস্য"
+                          : "মেস সদস্য";
+                      const isMe = m.user_id === user?.id;
+                      return (
+                        <option key={m.user_id || m.id} value={m.user_id}>
+                          {name} {isMe ? "(আপনি)" : ""} — {roleLabel}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
