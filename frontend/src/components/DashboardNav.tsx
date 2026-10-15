@@ -66,7 +66,7 @@ export function DashboardNav() {
                   >
                     {userMesses.map((m) => (
                       <option key={m.id} value={m.id}>
-                        {m.name} ({m.my_role === "owner" ? "মালিক" : m.my_role === "manager" ? "ম্যানেজার" : "সদস্য"})
+                        {m.name} ({m.my_role === "owner" || m.my_role === "manager" ? "ম্যানেজার" : "সদস্য"})
                       </option>
                     ))}
                   </select>

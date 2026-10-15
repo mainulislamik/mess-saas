@@ -169,9 +169,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                   <Building2 className="w-3 h-3 text-emerald-600" /> বর্তমান মেস
                 </span>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
-                  {currentMess.my_role === "owner"
-                    ? "মালিক"
-                    : currentMess.my_role === "manager"
+                  {currentMess.my_role === "owner" || currentMess.my_role === "manager"
                     ? "ম্যানেজার"
                     : "সদস্য"}
                 </span>
@@ -186,7 +184,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               >
                 {userMesses.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name} ({m.my_role === "owner" ? "মালিক" : m.my_role === "manager" ? "ম্যানেজার" : "সদস্য"})
+                    {m.name} ({m.my_role === "owner" || m.my_role === "manager" ? "ম্যানেজার" : "সদস্য"})
                   </option>
                 ))}
               </select>

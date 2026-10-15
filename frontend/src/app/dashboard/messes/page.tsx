@@ -501,14 +501,12 @@ export default function MessSettingsPage() {
                       <td className="px-6 py-4">
                         <span
                           className={`inline-block px-2.5 py-1 rounded-xl text-xs font-bold uppercase ${
-                            m.role === "owner"
-                              ? "bg-purple-100 text-purple-800 border border-purple-200"
-                              : m.role === "manager"
+                            m.role === "owner" || m.role === "manager"
                               ? "bg-amber-100 text-amber-800 border border-amber-200"
                               : "bg-slate-100 text-slate-700 border border-slate-200"
                           }`}
                         >
-                          {m.role === "owner" ? "মালিক (Owner)" : m.role === "manager" ? "ম্যানেজার" : "সদস্য"}
+                          {m.role === "owner" || m.role === "manager" ? "ম্যানেজার" : "সদস্য"}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-slate-500 text-xs">
