@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.models.enums import MemberRole, PlanType
 from app.schemas.user import UserResponse
 
@@ -29,6 +29,7 @@ class MembershipResponse(BaseModel):
     user_id: uuid.UUID
     role: MemberRole
     seat_label: Optional[str] = None
+    rent_amount: float = 0.0
     joined_at: datetime
     left_at: Optional[datetime] = None
     user: Optional[UserResponse] = None
@@ -71,8 +72,17 @@ class JoinMessRequest(BaseModel):
 class RoleUpdateRequest(BaseModel):
     role: MemberRole
     seat_label: Optional[str] = None
+    rent_amount: Optional[float] = None
 
 MembershipRoleUpdate = RoleUpdateRequest
+
+class MemberRentItem(BaseModel):
+    user_id: uuid.UUID
+    rent_amount: float = Field(ge=0)
+    seat_label: Optional[str] = None
+
+class BatchRentUpdateRequest(BaseModel):
+    members: List[MemberRentItem]
 
 class InviteCodeResponse(BaseModel):
     invite_code: str

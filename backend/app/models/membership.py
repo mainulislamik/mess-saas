@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint
+from sqlalchemy import String, DateTime, ForeignKey, Float, Enum as SQLEnum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.session import Base
@@ -15,6 +15,7 @@ class Membership(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[MemberRole] = mapped_column(SQLEnum(MemberRole, name="memberrole"), default=MemberRole.MEMBER, nullable=False)
     seat_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    rent_amount: Mapped[float] = mapped_column(Float, default=0.0, nullable=False, server_default="0.0")
     joined_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     left_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 

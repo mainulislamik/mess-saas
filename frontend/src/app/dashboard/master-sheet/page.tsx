@@ -34,7 +34,10 @@ interface MasterSheetKPIs {
   meal_rate: number;
   total_deposits: number;
   total_fixed_cost: number;
+  total_house_rent?: number;
+  total_shared_utilities?: number;
   fixed_cost_per_member: number;
+  shared_utility_per_member?: number;
   cash_in_hand: number;
   total_due: number;
   total_surplus: number;
@@ -46,6 +49,8 @@ interface MasterSheetMember {
   phone?: string;
   seat_label?: string;
   role: string;
+  rent_amount?: number;
+  shared_utility_share?: number;
   daily_meals: Record<number, number>;
   total_breakfast: number;
   total_lunch: number;

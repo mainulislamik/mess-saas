@@ -8,6 +8,8 @@ class MemberClosingSummary(BaseModel):
     user_name: str
     phone: Optional[str] = None
     seat_label: Optional[str] = None
+    rent_amount: float = 0.0
+    shared_utility_share: float = 0.0
     total_meals: float
     meal_rate: float
     meal_cost: float
@@ -24,8 +26,11 @@ class MonthlyClosingPreview(BaseModel):
     total_meals: float
     meal_rate: float
     total_fixed_cost: float
+    total_house_rent: float = 0.0
+    total_shared_utilities: float = 0.0
     member_count: int
     fixed_cost_per_member: float
+    shared_utility_per_member: float = 0.0
     members: List[MemberClosingSummary]
     member_summaries: Optional[List[MemberClosingSummary]] = None
     is_closed: bool = False

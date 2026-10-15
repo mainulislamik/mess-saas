@@ -24,6 +24,7 @@ class FixedCostCategory(str, Enum):
     ELECTRICITY = "electricity"
     WIFI = "wifi"
     COOK_MAID = "cook_maid"
+    WASTE = "waste"
     OTHER = "other"
 
 class SplitType(str, Enum):

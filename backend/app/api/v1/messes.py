@@ -24,6 +24,7 @@ from app.schemas.mess import (
     MembershipResponse,
     MembershipRoleUpdate,
     MealRulesUpdate,
+    BatchRentUpdateRequest,
 )
 
 router = APIRouter(prefix="/messes", tags=["Messes"])
@@ -290,6 +291,59 @@ async def get_mess_members(
             mess_id=m.mess_id,
             role=m.role,
             seat_label=m.seat_label,
+            rent_amount=m.rent_amount,
+            joined_at=m.joined_at,
+            user=m.user,
+            user_name=m.user.name if m.user else "সদস্য",
+            phone=m.user.phone if m.user else "",
+        )
+        for m in memberships
+    ]
+
+@router.patch("/{mess_id}/members-rent", response_model=List[MembershipResponse])
+@router.patch("/{mess_id}/members-rent/", response_model=List[MembershipResponse], include_in_schema=False)
+async def update_members_rent_batch(
+    mess_id: uuid.UUID,
+    batch_in: BatchRentUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem_result = await db.execute(
+        select(Membership).where(Membership.mess_id == mess_id, Membership.user_id == current_user.id)
+    )
+    current_mem = mem_result.scalar_one_or_none()
+    if not current_mem or current_mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="শুধুমাত্র ম্যানেজার বা মেস ওনার বাড়িভাড়া নির্ধারণ করতে পারবেন",
+        )
+
+    stmt = (
+        select(Membership)
+        .options(selectinload(Membership.user))
+        .where(Membership.mess_id == mess_id)
+        .order_by(Membership.joined_at.asc())
+    )
+    memberships = (await db.execute(stmt)).scalars().all()
+    mem_map = {m.user_id: m for m in memberships}
+
+    for item in batch_in.members:
+        if item.user_id in mem_map:
+            mem = mem_map[item.user_id]
+            mem.rent_amount = item.rent_amount
+            if item.seat_label is not None:
+                mem.seat_label = item.seat_label
+
+    await db.commit()
+
+    return [
+        MembershipResponse(
+            id=m.id,
+            user_id=m.user_id,
+            mess_id=m.mess_id,
+            role=m.role,
+            seat_label=m.seat_label,
+            rent_amount=m.rent_amount,
             joined_at=m.joined_at,
             user=m.user,
             user_name=m.user.name if m.user else "সদস্য",
@@ -344,6 +398,8 @@ async def update_member_role(
     target_mem.role = role_in.role
     if role_in.seat_label is not None:
         target_mem.seat_label = role_in.seat_label
+    if role_in.rent_amount is not None:
+        target_mem.rent_amount = role_in.rent_amount
 
     await db.commit()
     await db.refresh(target_mem)
@@ -354,6 +410,7 @@ async def update_member_role(
         mess_id=target_mem.mess_id,
         role=target_mem.role,
         seat_label=target_mem.seat_label,
+        rent_amount=target_mem.rent_amount,
         joined_at=target_mem.joined_at,
         user=target_mem.user,
         user_name=target_mem.user.name if target_mem.user else "সদস্য",

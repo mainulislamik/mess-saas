@@ -15,7 +15,7 @@ from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
 from app.models.closing import MonthlyClosing
-from app.models.enums import MemberRole
+from app.models.enums import MemberRole, FixedCostCategory
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.closing import (
     MemberClosingSummary,
@@ -79,12 +79,21 @@ async def calculate_monthly_closing_data(
     else:
         meal_rate = 0.0
 
-    # 5. Fixed costs (rent, gas, electricity, wifi, maid, etc.)
-    fc_stmt = select(func.coalesce(func.sum(FixedCost.amount), 0.0)).where(
+    # 5. Fixed costs & shared utilities vs individual rent
+    fc_stmt = select(FixedCost).where(
         FixedCost.mess_id == mess_id,
         FixedCost.month == month,
     )
-    total_fixed_cost = float((await db.execute(fc_stmt)).scalar() or 0.0)
+    fixed_costs = (await db.execute(fc_stmt)).scalars().all()
+
+    shared_utilities = [fc for fc in fixed_costs if fc.category != FixedCostCategory.RENT]
+    total_shared_utilities = round(sum(fc.amount for fc in shared_utilities), 2)
+    shared_utility_per_member = round(total_shared_utilities / member_count, 2) if member_count > 0 else 0.0
+
+    total_individual_rent = round(sum(m.rent_amount for m in memberships), 2)
+    fixed_cost_rent_sum = round(sum(fc.amount for fc in fixed_costs if fc.category == FixedCostCategory.RENT), 2)
+    total_house_rent = total_individual_rent if total_individual_rent > 0 else fixed_cost_rent_sum
+    total_fixed_cost = round(total_house_rent + total_shared_utilities, 2)
     fixed_per_member = round(total_fixed_cost / member_count, 2) if member_count > 0 else 0.0
 
     # 6. Deposits per member
@@ -104,7 +113,16 @@ async def calculate_monthly_closing_data(
         u = m.user
         m_meals = round(user_meals.get(m.user_id, 0.0), 2)
         m_meal_cost = round(m_meals * meal_rate, 2)
-        m_fixed_cost = fixed_per_member
+
+        # Rent determination: member's individual rent_amount if set; fallback to equal rent split if rent entered as fixed_cost
+        if m.rent_amount > 0:
+            m_rent = m.rent_amount
+        elif total_individual_rent == 0 and fixed_cost_rent_sum > 0 and member_count > 0:
+            m_rent = round(fixed_cost_rent_sum / member_count, 2)
+        else:
+            m_rent = 0.0
+
+        m_fixed_cost = round(m_rent + shared_utility_per_member, 2)
         m_total_cost = round(m_meal_cost + m_fixed_cost, 2)
         m_deposit = round(user_deposits.get(m.user_id, 0.0), 2)
         m_balance = round(m_deposit - m_total_cost, 2)
@@ -122,6 +140,8 @@ async def calculate_monthly_closing_data(
                 user_name=u.name if u else "Member",
                 phone=u.phone if u else None,
                 seat_label=m.seat_label,
+                rent_amount=round(m_rent, 2),
+                shared_utility_share=shared_utility_per_member,
                 total_meals=m_meals,
                 meal_rate=round(meal_rate, 2),
                 meal_cost=m_meal_cost,
@@ -135,7 +155,8 @@ async def calculate_monthly_closing_data(
 
     formula_exp = (
         f"মিল রেট = মোট বাজার (৳{total_bazar:.2f}) ÷ মোট মিল ({total_meals:.2f}) = ৳{meal_rate:.2f} | "
-        f"ফিক্সড খরচ জনপ্রতি = ৳{total_fixed_cost:.2f} ÷ {member_count} = ৳{fixed_per_member:.2f}"
+        f"শেয়ার্ড ইউটিলিটি জনপ্রতি = ৳{total_shared_utilities:.2f} ÷ {member_count} = ৳{shared_utility_per_member:.2f} | "
+        f"মোট বাড়িভাড়া = ৳{total_house_rent:.2f}"
     )
 
     return MonthlyClosingPreview(
@@ -145,8 +166,11 @@ async def calculate_monthly_closing_data(
         total_meals=round(total_meals, 2),
         meal_rate=round(meal_rate, 2),
         total_fixed_cost=round(total_fixed_cost, 2),
+        total_house_rent=round(total_house_rent, 2),
+        total_shared_utilities=round(total_shared_utilities, 2),
         member_count=member_count,
         fixed_cost_per_member=fixed_per_member,
+        shared_utility_per_member=shared_utility_per_member,
         members=members_summary,
         member_summaries=members_summary,
         is_closed=False,

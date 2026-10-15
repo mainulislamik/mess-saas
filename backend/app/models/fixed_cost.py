@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date as date_type
 from typing import Optional
-from sqlalchemy import Float, DateTime, String, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Float, DateTime, Date, String, ForeignKey, JSON, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.session import Base
@@ -18,6 +18,9 @@ class FixedCost(Base):
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     split_type: Mapped[SplitType] = mapped_column(SQLEnum(SplitType, name="splittype"), default=SplitType.EQUAL, nullable=False)
+    cost_date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
+    sub_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    meta_data: Mapped[Optional[dict]] = mapped_column(JSON, default=dict, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 

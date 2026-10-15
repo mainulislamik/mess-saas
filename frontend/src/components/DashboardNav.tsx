@@ -14,6 +14,7 @@ import {
   LogOut,
   User,
   Table,
+  Home,
 } from "lucide-react";
 
 export function DashboardNav() {
@@ -25,12 +26,14 @@ export function DashboardNav() {
     { href: "/dashboard/master-sheet", label: "মাস্টার শিট", icon: Table },
     { href: "/dashboard/meals", label: "মিল কাউন্ট", icon: CalendarCheck },
     { href: "/dashboard/bazar", label: "বাজার খরচ", icon: ShoppingBag },
+    { href: "/dashboard/rent-utilities", label: "বাড়িভাড়া ও ইউটিলিটি", icon: Home },
     { href: "/dashboard/closing", label: "মাস সমাপনী (Closing)", icon: FileCheck2 },
     { href: "/dashboard/messes", label: "মেস সেটিংস", icon: Building2 },
   ] : [
     { href: "/dashboard", label: "আমার হিসাব", icon: LayoutDashboard },
     { href: "/dashboard/master-sheet", label: "মেস মাস্টার শিট", icon: Table },
     { href: "/dashboard/meals", label: "আমার মিল", icon: CalendarCheck },
+    { href: "/dashboard/rent-utilities", label: "বাড়িভাড়া ও ইউটিলিটি", icon: Home },
     { href: "/dashboard/bazar", label: "বাজার শিডিউল", icon: ShoppingBag },
   ];
 

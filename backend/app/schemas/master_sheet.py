@@ -17,6 +17,8 @@ class MasterSheetMember(BaseModel):
     phone: Optional[str] = None
     seat_label: Optional[str] = None
     role: str = "member"
+    rent_amount: float = 0.0
+    shared_utility_share: float = 0.0
     daily_meals: Dict[int, float]  # day number (1..31) -> total meals
     total_breakfast: float = 0.0
     total_lunch: float = 0.0
@@ -41,7 +43,10 @@ class MasterSheetKPIs(BaseModel):
     meal_rate: float
     total_deposits: float
     total_fixed_cost: float
+    total_house_rent: float = 0.0
+    total_shared_utilities: float = 0.0
     fixed_cost_per_member: float
+    shared_utility_per_member: float = 0.0
     cash_in_hand: float  # total_deposits - total_bazar - total_fixed_cost (drawer balance)
     total_due: float
     total_surplus: float
