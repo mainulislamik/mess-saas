@@ -20,6 +20,8 @@ from app.schemas.meal import (
     MealResponse,
     MemberMealSummary,
     DailyMealMatrix,
+    MealEmergencyVoidRequest,
+    MealEmergencyVoidResponse,
 )
 
 router = APIRouter(prefix="/messes/{mess_id}/meals", tags=["Meals"])
@@ -214,6 +216,123 @@ async def batch_update_meals(
 
     await db.commit()
     return {"message": "Meals updated successfully", "count": len(data.meals)}
+
+@router.post("/emergency-slot-void", response_model=MealEmergencyVoidResponse)
+async def emergency_slot_void(
+    mess_id: uuid.UUID,
+    payload: MealEmergencyVoidRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem = await get_membership_for_mess(mess_id, current_user, db)
+    if mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Manager or Owner can perform emergency meal slot cancellation",
+        )
+
+    REASON_MAP = {
+        "bua_absent": "খালা/বুয়া আসেনি",
+        "no_gas": "গ্যাস সংকট / সিলিন্ডার শেষ",
+        "water_issue": "পানি বা বিদ্যুৎ সংকট",
+        "custom": payload.custom_reason or "বিশেষ কারণে রান্না হয়নি",
+    }
+    reason_label = REASON_MAP.get(payload.reason, payload.custom_reason or "রান্না হয়নি")
+
+    SLOT_LABEL_MAP = {
+        "breakfast": "সকালের নাস্তা",
+        "lunch": "দুপুরের খাবার",
+        "dinner": "রাতের খাবার",
+        "all": "সারাদিনের সকল খাবার",
+    }
+    slot_label = SLOT_LABEL_MAP.get(payload.slot, payload.slot)
+
+    # Fetch active members of mess
+    mem_stmt = select(Membership).where(Membership.mess_id == mess_id)
+    memberships = (await db.execute(mem_stmt)).scalars().all()
+    user_ids = [m.user_id for m in memberships]
+
+    # Fetch existing meals for date
+    meal_stmt = select(Meal).where(Meal.mess_id == mess_id, Meal.date == payload.date)
+    existing_meals = (await db.execute(meal_stmt)).scalars().all()
+    existing_map = {m.user_id: m for m in existing_meals}
+
+    affected_count = 0
+    note_text = f"রান্না বন্ধ ({reason_label})" if payload.action == "zero_out" else f"হোটেল খাবার ({reason_label})"
+
+    for uid in user_ids:
+        meal_obj = existing_map.get(uid)
+        if not meal_obj:
+            meal_obj = Meal(
+                mess_id=mess_id,
+                user_id=uid,
+                date=payload.date,
+                breakfast=0.0,
+                lunch=0.0,
+                dinner=0.0,
+                guest_breakfast=0.0,
+                guest_lunch=0.0,
+                guest_dinner=0.0,
+                is_off=True,
+                notes=note_text,
+            )
+            db.add(meal_obj)
+        else:
+            if payload.action == "zero_out":
+                if payload.slot == "breakfast":
+                    meal_obj.breakfast = 0.0
+                    meal_obj.guest_breakfast = 0.0
+                elif payload.slot == "lunch":
+                    meal_obj.lunch = 0.0
+                    meal_obj.guest_lunch = 0.0
+                elif payload.slot == "dinner":
+                    meal_obj.dinner = 0.0
+                    meal_obj.guest_dinner = 0.0
+                elif payload.slot == "all":
+                    meal_obj.breakfast = 0.0
+                    meal_obj.lunch = 0.0
+                    meal_obj.dinner = 0.0
+                    meal_obj.guest_breakfast = 0.0
+                    meal_obj.guest_lunch = 0.0
+                    meal_obj.guest_dinner = 0.0
+                    meal_obj.is_off = True
+
+                if (
+                    meal_obj.breakfast == 0
+                    and meal_obj.lunch == 0
+                    and meal_obj.dinner == 0
+                    and meal_obj.guest_breakfast == 0
+                    and meal_obj.guest_lunch == 0
+                    and meal_obj.guest_dinner == 0
+                ):
+                    meal_obj.is_off = True
+
+                meal_obj.notes = (
+                    f"{meal_obj.notes}; {note_text}" if meal_obj.notes and note_text not in meal_obj.notes else note_text
+                )
+            else:
+                meal_obj.notes = (
+                    f"{meal_obj.notes}; {note_text}" if meal_obj.notes and note_text not in meal_obj.notes else note_text
+                )
+
+        affected_count += 1
+
+    await db.commit()
+
+    action_msg = (
+        f"{payload.date} তারিখের {slot_label} বাতিল করে সব মেম্বারের মিল ০.০ করা হয়েছে ({reason_label})"
+        if payload.action == "zero_out"
+        else f"{payload.date} তারিখের {slot_label} হোটেল খাবার হিসেবে চিহ্নিত করা হয়েছে ({reason_label})"
+    )
+
+    return MealEmergencyVoidResponse(
+        date=payload.date,
+        slot=payload.slot,
+        action=payload.action,
+        reason_text=reason_label,
+        affected_members_count=affected_count,
+        message=action_msg,
+    )
 
 def parse_time_str(val: str, default_hour: int, default_min: int) -> time_type:
     try:

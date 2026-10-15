@@ -50,3 +50,18 @@ class DailyMealMatrix(BaseModel):
     date: date_type
     total_day_meals: float
     members: List[MealResponse]
+
+class MealEmergencyVoidRequest(BaseModel):
+    date: date_type
+    slot: str = Field(..., pattern="^(breakfast|lunch|dinner|all)$")
+    reason: str = Field("bua_absent", description="bua_absent, no_gas, water_issue, custom")
+    custom_reason: Optional[str] = None
+    action: str = Field("zero_out", pattern="^(zero_out|hotel_food)$")
+
+class MealEmergencyVoidResponse(BaseModel):
+    date: date_type
+    slot: str
+    action: str
+    reason_text: str
+    affected_members_count: int
+    message: str

@@ -22,6 +22,10 @@ import {
   CheckCircle2,
   CalendarDays,
   UserCheck,
+  AlertTriangle,
+  X,
+  Flame,
+  Ban,
 } from "lucide-react";
 
 export default function MealsPage() {
@@ -123,6 +127,38 @@ export default function MealsPage() {
   const [managerLoading, setManagerLoading] = useState(true);
   const [savingBatch, setSavingBatch] = useState(false);
   const [managerMessage, setManagerMessage] = useState<string | null>(null);
+
+  // Emergency Slot Modal State
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
+  const [emergencySlot, setEmergencySlot] = useState<"breakfast" | "lunch" | "dinner" | "all">("lunch");
+  const [emergencyReason, setEmergencyReason] = useState<string>("bua_absent");
+  const [emergencyCustomReason, setEmergencyCustomReason] = useState<string>("");
+  const [emergencyAction, setEmergencyAction] = useState<"zero_out" | "hotel_food">("zero_out");
+  const [emergencySubmitting, setEmergencySubmitting] = useState(false);
+
+  const handleEmergencySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentMess?.id) return;
+    try {
+      setEmergencySubmitting(true);
+      const res = await api.post(`/messes/${currentMess.id}/meals/emergency-slot-void`, {
+        date: date || new Date().toISOString().split("T")[0],
+        slot: emergencySlot,
+        reason: emergencyReason,
+        custom_reason: emergencyReason === "custom" ? emergencyCustomReason.trim() : undefined,
+        action: emergencyAction,
+      });
+
+      setShowEmergencyModal(false);
+      setManagerMessage(res.data.message);
+      fetchDaily();
+      fetchMonthly();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "জরুরি অ্যাকশন সম্পন্ন করতে সমস্যা হয়েছে");
+    } finally {
+      setEmergencySubmitting(false);
+    }
+  };
 
   useEffect(() => {
     setDate(new Date().toISOString().split("T")[0]);
@@ -702,14 +738,25 @@ export default function MealsPage() {
             </div>
           </div>
 
-          <button
-            onClick={handleSaveBatch}
-            disabled={savingBatch}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
-          >
-            <Save className="w-4 h-4" />
-            {savingBatch ? "সংরক্ষণ হচ্ছে..." : "সব মিল সংরক্ষণ করুন"}
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setShowEmergencyModal(true)}
+              className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+              title="খালা না আসলে বা গ্যাস না থাকলে এক ক্লিকে মিল শূন্য করুন"
+            >
+              <AlertTriangle className="w-4 h-4 text-rose-600" />
+              জরুরি স্লট বাতিল / রান্না বন্ধ
+            </button>
+
+            <button
+              onClick={handleSaveBatch}
+              disabled={savingBatch}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow flex items-center gap-2 transition disabled:opacity-50 cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              {savingBatch ? "সংরক্ষণ হচ্ছে..." : "সব মিল সংরক্ষণ করুন"}
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -833,6 +880,147 @@ export default function MealsPage() {
           ))}
         </div>
       </div>
+
+      {/* Emergency Meal Slot Void Modal */}
+      {showEmergencyModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-rose-700">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+                <h3 className="font-bold text-base text-slate-900">জরুরি স্লট বাতিল / রান্না বন্ধ</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEmergencyModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              বুয়া/খালা না আসলে বা গ্যাস সংকটে রান্না না হলে এক ক্লিকে সংশ্লিষ্ট বেলার মিল শূন্য (০.০) করুন যাতে কোনো মেম্বারের টাকা না কাটে।
+            </p>
+
+            <form onSubmit={handleEmergencySubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">তারিখ</label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 text-xs font-semibold text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">কোন বেলার রান্না হয়নি?</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: "lunch", label: "দুপুর (Lunch)" },
+                    { id: "dinner", label: "রাত (Dinner)" },
+                    { id: "breakfast", label: "নাস্তা (Breakfast)" },
+                    { id: "all", label: "সারাদিনের সকল মিল" },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setEmergencySlot(s.id as any)}
+                      className={`py-2 px-3 text-xs font-bold rounded-xl border transition cursor-pointer ${
+                        emergencySlot === s.id
+                          ? "bg-rose-50 border-rose-300 text-rose-800"
+                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">রান্না না হওয়ার কারণ</label>
+                <select
+                  value={emergencyReason}
+                  onChange={(e) => setEmergencyReason(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 text-xs font-semibold text-slate-800 cursor-pointer"
+                >
+                  <option value="bua_absent">খালা / বুয়া আসেনি (কামাই)</option>
+                  <option value="no_gas">গ্যাস সংকট / সিলিন্ডার শেষ</option>
+                  <option value="water_issue">পানি বা বিদ্যুৎ সমস্যা</option>
+                  <option value="custom">অন্যান্য বিশেষ কারণ</option>
+                </select>
+              </div>
+
+              {emergencyReason === "custom" && (
+                <div>
+                  <input
+                    type="text"
+                    value={emergencyCustomReason}
+                    onChange={(e) => setEmergencyCustomReason(e.target.value)}
+                    placeholder="কারণ সংক্ষেপে লিখুন (যেমন: মেস ছুটির সিদ্ধান্ত)"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 text-xs font-medium text-slate-800"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">করণীয় ব্যবস্থা</label>
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100">
+                    <input
+                      type="radio"
+                      name="emergencyAction"
+                      value="zero_out"
+                      checked={emergencyAction === "zero_out"}
+                      onChange={() => setEmergencyAction("zero_out")}
+                      className="text-rose-600 focus:ring-rose-500"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-slate-800 block">মিল শূন্যকরণ (সবাই নিজ দায়িত্বে খাবে)</span>
+                      <span className="text-slate-500 text-[11px]">মেম্বারদের ওই বেলার মিল ০.০ হবে, কোনো টাকা কাটা হবে না</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100">
+                    <input
+                      type="radio"
+                      name="emergencyAction"
+                      value="hotel_food"
+                      checked={emergencyAction === "hotel_food"}
+                      onChange={() => setEmergencyAction("hotel_food")}
+                      className="text-rose-600 focus:ring-rose-500"
+                    />
+                    <div className="text-xs">
+                      <span className="font-bold text-slate-800 block">মেস থেকে হোটেল খাবার আনা হয়েছে</span>
+                      <span className="text-slate-500 text-[11px]">মেম্বারদের মিল চালু থাকবে, হোটেল বিল বাজারে যুক্ত হবে</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEmergencyModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={emergencySubmitting}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {emergencySubmitting ? "প্রসেস হচ্ছে..." : "অ্যাকশন কার্যকর করুন"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
