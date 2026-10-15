@@ -42,15 +42,11 @@ export default function LoginPage() {
     setError(null);
     try {
       await login(p, pass);
-      if (p === "IT") {
-        router.push("/platform");
-      } else {
-        router.push("/dashboard");
-      }
+      router.push("/dashboard");
     } catch (err: any) {
       console.error(err);
       setError(
-        err.response?.data?.detail || "লগইন ব্যর্থ হয়েছে। ফোন নম্বর/আইডি বা পাসওয়ার্ড যাচাই করুন।"
+        err.response?.data?.detail || "লগইন ব্যর্থ হয়েছে। ফোন নম্বর বা পাসওয়ার্ড যাচাই করুন।"
       );
     } finally {
       setLoading(false);
@@ -85,7 +81,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-sm font-semibold text-slate-800 mb-1.5">
-                মোবাইল নম্বর / সুপার অ্যাডমিন আইডি
+                মোবাইল নম্বর
               </label>
               <div className="relative rounded-xl shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -94,7 +90,7 @@ export default function LoginPage() {
                 <input
                   type="text"
                   required
-                  placeholder="017XXXXXXXX অথবা IT"
+                  placeholder="017XXXXXXXX"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="block w-full pl-10 pr-3.5 py-2.5 border border-slate-300 rounded-xl bg-slate-50/50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm font-medium transition-all"

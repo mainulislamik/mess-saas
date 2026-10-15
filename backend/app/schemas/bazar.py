@@ -1,6 +1,6 @@
 import uuid
 from datetime import date as date_type, datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 class BazarCreate(BaseModel):
@@ -33,3 +33,22 @@ class BazarMonthlySummary(BaseModel):
     bazar_count: int
     items: list[BazarResponse]
     bazars: Optional[list[BazarResponse]] = None
+
+class BazarParsedItem(BaseModel):
+    item: str
+    amount: float
+
+class BazarQuickParseRequest(BaseModel):
+    text: str
+
+class BazarQuickParseResponse(BaseModel):
+    items: List[BazarParsedItem]
+    total_amount: float
+    formatted_description: str
+
+class BazarPriceTrendItem(BaseModel):
+    item_name: str
+    frequency: int
+    last_price: float
+    avg_price: float
+    price_change: str  # "stable", "up", "down"

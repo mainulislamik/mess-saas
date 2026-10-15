@@ -23,6 +23,9 @@ import {
   ArrowRight,
   CreditCard,
   Table,
+  UtensilsCrossed,
+  Users2,
+  MessageSquare,
 } from "lucide-react";
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -70,6 +73,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           { href: "/dashboard/master-sheet", label: "মেস মাস্টার শিট", icon: Table },
           { href: "/dashboard/meals", label: "মিল কাউন্ট ও শিট", icon: CalendarCheck },
           { href: "/dashboard/bazar", label: "বাজার ও অন্যান্য খরচ", icon: ShoppingBag },
+          { href: "/dashboard/menu", label: "খাবারের মেন্যু ও ভোট", icon: UtensilsCrossed },
+          { href: "/dashboard/maid-gas", label: "বুয়া হাজিরা ও গ্যাস", icon: Users2 },
+          { href: "/dashboard/whatsapp", label: "হোয়াটসঅ্যাপ ডাইজেস্ট বট", icon: MessageSquare },
           { href: "/dashboard/closing", label: "মাস সমাপনী (Closing)", icon: FileCheck2 },
           { href: "/dashboard/messes", label: "মেস সেটিংস ও সদস্য", icon: Building2 },
         ]
@@ -78,6 +84,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           { href: "/dashboard/master-sheet", label: "মেস মাস্টার শিট", icon: Table },
           { href: "/dashboard/meals", label: "আমার মিল রিকোয়েস্ট", icon: CalendarCheck },
           { href: "/dashboard/bazar", label: "বাজার শিডিউল ও তালিকা", icon: ShoppingBag },
+          { href: "/dashboard/menu", label: "খাবারের মেন্যু ও ভোট", icon: UtensilsCrossed },
+          { href: "/dashboard/maid-gas", label: "বুয়া হাজিরা ও গ্যাস", icon: Users2 },
+          { href: "/dashboard/whatsapp", label: "হোয়াটসঅ্যাপ ডাইজেস্ট বট", icon: MessageSquare },
         ];
 
   return (

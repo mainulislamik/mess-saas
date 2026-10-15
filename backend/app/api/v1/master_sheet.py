@@ -1,8 +1,11 @@
 import uuid
 import calendar
+import csv
+import io
 from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -259,4 +262,105 @@ async def get_master_sheet(
         daily_totals=daily_totals_list,
         bazars=bazar_list,
         fixed_costs=fixed_list,
+    )
+
+@router.get("/export-csv")
+async def export_master_sheet_csv(
+    mess_id: uuid.UUID,
+    month: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    sheet: MasterSheetResponse = await get_master_sheet(mess_id, month, current_user, db)
+
+    output = io.StringIO()
+    # Write UTF-8 BOM so Excel opens Bangla characters natively
+    output.write("\ufeff")
+    writer = csv.writer(output)
+
+    # 1. Header Information
+    writer.writerow(["মেস মাস্টার শিট ও মাসিক অডিট বিবরণী"])
+    writer.writerow(["মেসের নাম", sheet.mess_name])
+    writer.writerow(["হিসাবের মাস", sheet.month])
+    writer.writerow([])
+
+    # 2. Key Performance Indicators
+    writer.writerow(["সার্বিক আর্থিক সূচক (KPIs)"])
+    writer.writerow(["মোট মিল", sheet.kpis.total_meals])
+    writer.writerow(["মোট বাজার খরচ (টাকা)", sheet.kpis.total_bazar])
+    writer.writerow(["মিল রেট (টাকা/মিল)", sheet.kpis.meal_rate])
+    writer.writerow(["মোট সদস্য জমা (টাকা)", sheet.kpis.total_deposits])
+    writer.writerow(["মোট ইউটিলিটি ও ফিক্সড কস্ট (টাকা)", sheet.kpis.total_fixed_cost])
+    writer.writerow(["সদস্যপ্রতি ফিক্সড শেয়ার (টাকা)", sheet.kpis.fixed_cost_per_member])
+    writer.writerow(["মেস ফান্ড অবশিষ্ট ক্যাশ (টাকা)", sheet.kpis.cash_in_hand])
+    writer.writerow([])
+
+    # 3. Individual Member Summary
+    writer.writerow(["সদস্যভিত্তিক হিসাব ও ব্যালেন্স বিবরণী"])
+    writer.writerow([
+        "ক্রমিক",
+        "সদস্যের নাম",
+        "ফোন নম্বর",
+        "আসন / রুম",
+        "মোট মিল",
+        "মিল বাবদ খরচ (টাকা)",
+        "ফিক্সড চার্জ (টাকা)",
+        "সর্বমোট খরচ (টাকা)",
+        "জমা প্রদান (টাকা)",
+        "অবশিষ্ট ব্যালেন্স (টাকা)",
+        "স্ট্যাটাস",
+    ])
+    for idx, m in enumerate(sheet.members, start=1):
+        status_txt = "বকেয়া আছে" if m.balance < 0 else "ফেরত পাবে" if m.balance > 0 else "পরিশোধিত"
+        writer.writerow([
+            idx,
+            m.name,
+            m.phone or "-",
+            m.seat_label or "জেনারেল",
+            m.total_meals,
+            f"{m.meal_cost:.2f}",
+            f"{m.fixed_cost_share:.2f}",
+            f"{m.total_cost:.2f}",
+            f"{m.total_deposit:.2f}",
+            f"{m.balance:.2f}",
+            status_txt,
+        ])
+    writer.writerow([])
+
+    # 4. 31-Day Meal Grid
+    days_header = ["ক্রমিক", "সদস্যের নাম"] + [f"{d} তারিখ" for d in range(1, sheet.days_in_month + 1)] + ["মোট মিল"]
+    writer.writerow(["মাসিক ৩১ দিনের মিল ম্যাট্রিক্স"])
+    writer.writerow(days_header)
+    for idx, m in enumerate(sheet.members, start=1):
+        day_meals = [m.daily_meals.get(d, 0.0) for d in range(1, sheet.days_in_month + 1)]
+        writer.writerow([idx, m.name] + day_meals + [m.total_meals])
+    
+    # Daily Totals row
+    daily_row: list = ["-", "দৈনিক মোট মিল"]
+    daily_dict = {item.day: item.total_meals for item in sheet.daily_totals}
+    for d in range(1, sheet.days_in_month + 1):
+        daily_row.append(daily_dict.get(d, 0.0))
+    daily_row.append(sheet.kpis.total_meals)
+    writer.writerow(daily_row)
+    writer.writerow([])
+
+    # 5. Bazar Breakdown
+    writer.writerow(["বাজারের বিস্তারিত খতিয়ান"])
+    writer.writerow(["তারিখ", "বাজারকারী সদস্য", "আইটেম বিবরণী", "টাকা"])
+    for b in sheet.bazars:
+        writer.writerow([b.date, b.user_name, b.items or "-", f"{b.amount:.2f}"])
+    writer.writerow([])
+
+    # 6. Fixed Costs Breakdown
+    writer.writerow(["ইউটিলিটি ও ফিক্সড কস্ট তালিকা"])
+    writer.writerow(["বিভাগ", "বিবরণ", "টাকা", "বন্টন পদ্ধতি"])
+    for fc in sheet.fixed_costs:
+        writer.writerow([fc.category, fc.title, fc.amount, fc.split_type])
+
+    output.seek(0)
+    filename = f"mess_master_sheet_{sheet.month}.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

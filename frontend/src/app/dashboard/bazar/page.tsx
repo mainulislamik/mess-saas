@@ -13,7 +13,20 @@ import {
   Receipt,
   CheckCircle,
   Users,
+  Sparkles,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Zap,
 } from "lucide-react";
+
+interface PriceTrend {
+  item_name: string;
+  frequency: number;
+  last_price: number;
+  avg_price: number;
+  price_change: "stable" | "up" | "down";
+}
 
 export default function BazarPage() {
   const router = useRouter();
@@ -40,6 +53,16 @@ export default function BazarPage() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Quick NLP State
+  const [entryMode, setEntryMode] = useState<"standard" | "smart">("smart");
+  const [quickText, setQuickText] = useState("");
+  const [parsedItems, setParsedItems] = useState<{ item: string; amount: number }[]>([]);
+  const [parsedTotal, setParsedTotal] = useState(0);
+  const [parsingNLP, setParsingNLP] = useState(false);
+
+  // Price trends
+  const [priceTrends, setPriceTrends] = useState<PriceTrend[]>([]);
 
   const isManagerOrOwner =
     currentMess?.my_role === "owner" || currentMess?.my_role === "manager";
@@ -69,6 +92,16 @@ export default function BazarPage() {
     }
   };
 
+  const fetchPriceTrends = async () => {
+    if (!currentMess) return;
+    try {
+      const res = await api.get(`/messes/${currentMess.id}/bazars/price-trends`);
+      setPriceTrends(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login");
@@ -76,9 +109,28 @@ export default function BazarPage() {
     }
     if (currentMess) {
       setLoading(true);
-      Promise.all([fetchBazars(), fetchMembers()]).finally(() => setLoading(false));
+      Promise.all([fetchBazars(), fetchMembers(), fetchPriceTrends()]).finally(() => setLoading(false));
     }
   }, [user, currentMess, isLoading, month, router]);
+
+  const handleQuickParse = async () => {
+    if (!currentMess || !quickText.trim()) return;
+    setParsingNLP(true);
+    setError(null);
+    try {
+      const res = await api.post(`/messes/${currentMess.id}/bazars/parse-quick`, {
+        text: quickText,
+      });
+      setParsedItems(res.data.items || []);
+      setParsedTotal(res.data.total_amount || 0);
+      setAmount(String(res.data.total_amount || ""));
+      setItems(res.data.formatted_description || "");
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "বাজারের টেক্সট পার্স করতে সমস্যা হয়েছে");
+    } finally {
+      setParsingNLP(false);
+    }
+  };
 
   const handleAddBazar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,6 +215,52 @@ export default function BazarPage() {
           </div>
         </div>
 
+        {/* Smart Price Trend Radar */}
+        {priceTrends.length > 0 && (
+          <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  নিত্যপ্রয়োজনীয় মেস বাজারদর রাডার ও ট্রেন্ড
+                </h3>
+              </div>
+              <span className="text-xs text-slate-400">সাম্প্রতিক বাজার খতিয়ান ভিত্তিক</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {priceTrends.map((pt, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition"
+                >
+                  <div className="text-xs font-semibold text-slate-600 truncate">{pt.item_name}</div>
+                  <div className="text-base font-extrabold text-slate-900 mt-0.5">
+                    ৳{pt.last_price.toLocaleString("bn-BD")}
+                  </div>
+                  <div className="flex items-center justify-between mt-1 text-[11px]">
+                    <span className="text-slate-400">গড়: ৳{Math.round(pt.avg_price)}</span>
+                    {pt.price_change === "up" && (
+                      <span className="inline-flex items-center text-rose-600 font-bold">
+                        <TrendingUp className="w-3 h-3 mr-0.5" /> উর্ধ্বমুখী
+                      </span>
+                    )}
+                    {pt.price_change === "down" && (
+                      <span className="inline-flex items-center text-emerald-600 font-bold">
+                        <TrendingDown className="w-3 h-3 mr-0.5" /> নিম্নমুখী
+                      </span>
+                    )}
+                    {pt.price_change === "stable" && (
+                      <span className="inline-flex items-center text-slate-500 font-medium">
+                        <Minus className="w-3 h-3 mr-0.5" /> স্থিতিশীল
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Bazars Table */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
@@ -234,9 +332,83 @@ export default function BazarPage() {
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200">
               <h2 className="text-xl font-bold text-slate-900 mb-1">নতুন বাজার যোগ করুন</h2>
-              <p className="text-xs text-slate-500 mb-6">
+              <p className="text-xs text-slate-500 mb-4">
                 বাজারের জিনিসপত্র ও খরচের পরিমাণ সঠিকভাবে লিখুন
               </p>
+
+              {/* Mode Toggle */}
+              <div className="flex bg-slate-100 p-1 rounded-2xl mb-4">
+                <button
+                  type="button"
+                  onClick={() => setEntryMode("smart")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    entryMode === "smart"
+                      ? "bg-white text-emerald-700 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  স্মার্ট কুইক এন্ট্রি (লিখুন)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEntryMode("standard")}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                    entryMode === "standard"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  সাধারণ ফর্ম
+                </button>
+              </div>
+
+              {/* Smart Quick Entry Box */}
+              {entryMode === "smart" && (
+                <div className="mb-4 p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-900 flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-emerald-600" /> এক লাইনে লিখুন:
+                    </span>
+                    <span className="text-[11px] text-emerald-700">নাম ও দাম একসাথে</span>
+                  </div>
+                  <textarea
+                    rows={2}
+                    placeholder="যেমন: আলু ৮০, ডিম ১৪০, সয়াবিন তেল ২২০, মুরগি ৩৫০"
+                    value={quickText}
+                    onChange={(e) => setQuickText(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+                  />
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={handleQuickParse}
+                      disabled={parsingNLP || !quickText.trim()}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                    >
+                      {parsingNLP ? "হিসাব হচ্ছে..." : "স্বয়ংক্রিয় হিসাব করুন"}
+                    </button>
+                    {parsedTotal > 0 && (
+                      <span className="text-xs font-extrabold text-emerald-900">
+                        মোট: ৳{parsedTotal.toLocaleString("bn-BD")}
+                      </span>
+                    )}
+                  </div>
+
+                  {parsedItems.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1 border-t border-emerald-200/60">
+                      {parsedItems.map((it, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 bg-white text-emerald-800 text-[11px] font-semibold rounded-md border border-emerald-300 shadow-2xs"
+                        >
+                          {it.item}: ৳{it.amount}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {error && (
                 <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-center gap-2">

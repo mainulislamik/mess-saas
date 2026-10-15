@@ -8,6 +8,9 @@ from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
 from app.models.closing import MonthlyClosing
 from app.models.platform import PlatformSetting, PlatformAnnouncement, SubscriptionPayment
+from app.models.menu import MealPoll, MealPollOption, MealPollVote, WeeklyMenuRoutine
+from app.models.maid_gas import MaidAttendance, GasLog
+from app.models.whatsapp import WhatsAppConfig
 
 __all__ = [
     "MemberRole",
@@ -26,4 +29,11 @@ __all__ = [
     "PlatformSetting",
     "PlatformAnnouncement",
     "SubscriptionPayment",
+    "MealPoll",
+    "MealPollOption",
+    "MealPollVote",
+    "WeeklyMenuRoutine",
+    "MaidAttendance",
+    "GasLog",
+    "WhatsAppConfig",
 ]

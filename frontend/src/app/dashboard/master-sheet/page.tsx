@@ -24,6 +24,8 @@ import {
   Utensils,
   Receipt,
   Users,
+  FileSpreadsheet,
+  Download,
 } from "lucide-react";
 
 interface MasterSheetKPIs {
@@ -178,7 +180,30 @@ export default function MasterSheetPage() {
   };
 
   const handlePrint = () => {
-    window.print();
+    if (currentMess?.id) {
+      window.open(`/dashboard/master-sheet/print?mess_id=${currentMess.id}&month=${month}`, "_blank");
+    } else {
+      window.print();
+    }
+  };
+
+  const handleDownloadCSV = async () => {
+    if (!currentMess?.id) return;
+    try {
+      const res = await api.get(`/messes/${currentMess.id}/master-sheet/export-csv?month=${month}`, {
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: "text/csv;charset=utf-8;" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `master_sheet_${currentMess.name}_${month}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      console.error("CSV Download failed", err);
+      alert("CSV এক্সপোর্ট করতে সমস্যা হয়েছে");
+    }
   };
 
   return (
@@ -232,8 +257,18 @@ export default function MasterSheetPage() {
           </button>
 
           <button
+            onClick={handleDownloadCSV}
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-sm font-semibold rounded-xl transition"
+            title="এক্সেল বা গুগল শিটে খোলার জন্য CSV ডাউনলোড করুন"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
+            <span>এক্সেল / CSV</span>
+          </button>
+
+          <button
             onClick={handlePrint}
             className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition"
+            title="A4 সাইজে সুন্দরভাবে প্রিন্ট বা PDF ডাউনলোড করুন"
           >
             <Printer className="h-4 w-4" />
             <span>প্রিন্ট / PDF</span>
