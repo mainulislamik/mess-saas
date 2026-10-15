@@ -37,14 +37,14 @@ export default function MemberDashboardView() {
   // Active day selection: "today" | "tomorrow"
   const [selectedDay, setSelectedDay] = useState<"today" | "tomorrow">("today");
 
-  // Meal state for active form
+  // Meal state for active form (defaults to 0.0 - OFF until explicitly requested)
   const [breakfast, setBreakfast] = useState(0.0);
-  const [lunch, setLunch] = useState(1.0);
-  const [dinner, setDinner] = useState(1.0);
+  const [lunch, setLunch] = useState(0.0);
+  const [dinner, setDinner] = useState(0.0);
   const [guestBreakfast, setGuestBreakfast] = useState(0.0);
   const [guestLunch, setGuestLunch] = useState(0.0);
   const [guestDinner, setGuestDinner] = useState(0.0);
-  const [isOff, setIsOff] = useState(false);
+  const [isOff, setIsOff] = useState(true);
   const [savingMeal, setSavingMeal] = useState(false);
   const [mealSuccess, setMealSuccess] = useState(false);
 
@@ -79,12 +79,12 @@ export default function MemberDashboardView() {
     const dayData = selectedDay === "today" ? summary.today : summary.tomorrow;
     if (dayData) {
       setBreakfast(dayData.breakfast ?? 0.0);
-      setLunch(dayData.lunch ?? 1.0);
-      setDinner(dayData.dinner ?? 1.0);
+      setLunch(dayData.lunch ?? 0.0);
+      setDinner(dayData.dinner ?? 0.0);
       setGuestBreakfast(dayData.guest_breakfast ?? 0.0);
       setGuestLunch(dayData.guest_lunch ?? 0.0);
       setGuestDinner(dayData.guest_dinner ?? 0.0);
-      setIsOff(dayData.is_off ?? false);
+      setIsOff(dayData.is_off ?? (dayData.total_meals === 0));
     }
   }, [selectedDay, summary]);
 

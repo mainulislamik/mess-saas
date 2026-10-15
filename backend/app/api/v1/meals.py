@@ -75,7 +75,7 @@ async def get_daily_meals(
                 )
             )
         else:
-            # Default meal entry if not yet recorded (0 brk, 1 lunch, 1 dinner = 2 meals)
+            # Default meal entry if not yet recorded (0 meals, OFF until explicitly set)
             results.append(
                 MealResponse(
                     id=uuid.uuid4(),
@@ -83,16 +83,15 @@ async def get_daily_meals(
                     user_id=m.user_id,
                     date=date,
                     breakfast=0.0,
-                    lunch=1.0,
-                    dinner=1.0,
-                    is_off=False,
+                    lunch=0.0,
+                    dinner=0.0,
+                    is_off=True,
                     notes=None,
-                    total_meals=2.0,
+                    total_meals=0.0,
                     user_name=user.name if user else "Member",
                     created_at=datetime.utcnow(),
                 )
             )
-            total_day_meals += 2.0
 
     return DailyMealMatrix(
         date=date,
