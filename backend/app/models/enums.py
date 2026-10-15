@@ -30,3 +30,8 @@ class FixedCostCategory(str, Enum):
 class SplitType(str, Enum):
     EQUAL = "equal"
     CUSTOM = "custom"
+
+class BazarStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"

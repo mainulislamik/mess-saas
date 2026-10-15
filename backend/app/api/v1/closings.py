@@ -15,7 +15,7 @@ from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
 from app.models.closing import MonthlyClosing
-from app.models.enums import MemberRole, FixedCostCategory
+from app.models.enums import MemberRole, FixedCostCategory, BazarStatus
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.closing import (
     MemberClosingSummary,
@@ -49,11 +49,12 @@ async def calculate_monthly_closing_data(
     if member_count == 0:
         raise HTTPException(status_code=400, detail="মেসে কোনো সক্রিয় মেম্বার নেই")
 
-    # 2. Total Bazar
+    # 2. Total Bazar (only approved bazars)
     bazar_stmt = select(func.coalesce(func.sum(Bazar.amount), 0.0)).where(
         Bazar.mess_id == mess_id,
         Bazar.date >= start_date,
         Bazar.date < end_date,
+        Bazar.status == BazarStatus.APPROVED,
     )
     total_bazar = float((await db.execute(bazar_stmt)).scalar() or 0.0)
 

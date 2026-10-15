@@ -2,6 +2,7 @@ import uuid
 from datetime import date as date_type, datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
+from app.models.enums import BazarStatus
 
 class BazarCreate(BaseModel):
     user_id: uuid.UUID  # shopper
@@ -10,6 +11,10 @@ class BazarCreate(BaseModel):
     items: str = Field(min_length=2, description="List of items shopped")
     receipt_url: Optional[str] = None
     notes: Optional[str] = None
+
+class BazarReviewRequest(BaseModel):
+    action: str = Field(..., pattern="^(approve|reject)$")
+    rejection_reason: Optional[str] = None
 
 class BazarResponse(BaseModel):
     id: uuid.UUID
@@ -21,6 +26,10 @@ class BazarResponse(BaseModel):
     items: str
     receipt_url: Optional[str] = None
     notes: Optional[str] = None
+    status: BazarStatus = BazarStatus.APPROVED
+    approved_by: Optional[uuid.UUID] = None
+    approved_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -31,6 +40,7 @@ class BazarMonthlySummary(BaseModel):
     total_bazar: float
     total_bazar_amount: Optional[float] = None
     bazar_count: int
+    pending_count: int = 0
     items: list[BazarResponse]
     bazars: Optional[list[BazarResponse]] = None
 

@@ -15,6 +15,7 @@ from app.models.meal import Meal
 from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
+from app.models.enums import BazarStatus
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.dashboard import (
     DashboardStats,
@@ -70,11 +71,12 @@ async def get_dashboard(
     month_total_meals = sum(m.total_meals for m in all_month_meals)
     my_month_meals = sum(m.total_meals for m in all_month_meals if m.user_id == current_user.id)
 
-    # Month Bazar
+    # Month Bazar (approved only)
     bazar_stmt = select(func.coalesce(func.sum(Bazar.amount), 0.0)).where(
         Bazar.mess_id == mess_id,
         Bazar.date >= start_date,
         Bazar.date < end_date,
+        Bazar.status == BazarStatus.APPROVED,
     )
     month_total_bazar = float((await db.execute(bazar_stmt)).scalar() or 0.0)
 
@@ -343,11 +345,12 @@ async def get_member_personal_summary(
     mess_total_meals = sum(m.total_meals for m in all_month_meals)
     my_month_meals = sum(m.total_meals for m in all_month_meals if m.user_id == current_user.id)
 
-    # Month Bazar
+    # Month Bazar (approved only)
     bazar_stmt = select(func.coalesce(func.sum(Bazar.amount), 0.0)).where(
         Bazar.mess_id == mess_id,
         Bazar.date >= start_date,
         Bazar.date < end_date,
+        Bazar.status == BazarStatus.APPROVED,
     )
     mess_total_bazar = (await db.execute(bazar_stmt)).scalar() or 0.0
 

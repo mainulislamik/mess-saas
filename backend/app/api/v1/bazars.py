@@ -1,5 +1,5 @@
 import uuid
-from datetime import date as date_type
+from datetime import date as date_type, datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,11 +9,12 @@ from sqlalchemy.orm import selectinload
 from app.db.session import get_db
 from app.models.user import User
 from app.models.bazar import Bazar
-from app.models.enums import MemberRole
+from app.models.enums import MemberRole, BazarStatus
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.bazar import (
     BazarCreate,
     BazarResponse,
+    BazarReviewRequest,
     BazarMonthlySummary,
     BazarQuickParseRequest,
     BazarQuickParseResponse,
@@ -66,17 +67,23 @@ async def list_bazars(
             items=b.items,
             receipt_url=b.receipt_url,
             notes=b.notes,
+            status=b.status,
+            approved_by=b.approved_by,
+            approved_at=b.approved_at,
+            rejection_reason=b.rejection_reason,
             created_at=b.created_at,
         )
         for b in bazars
     ]
 
-    total = sum(b.amount for b in items)
+    total = sum(b.amount for b in items if b.status == BazarStatus.APPROVED)
+    pending_count = len([b for b in items if b.status == BazarStatus.PENDING])
     return BazarMonthlySummary(
         month=month,
         total_bazar=round(total, 2),
         total_bazar_amount=round(total, 2),
         bazar_count=len(items),
+        pending_count=pending_count,
         items=items,
         bazars=items,
     )
@@ -90,21 +97,34 @@ async def create_bazar(
     db: AsyncSession = Depends(get_db),
 ):
     mem = await get_membership_for_mess(mess_id, current_user, db)
-    # Any member can add bazar they did, or manager/owner can add for anyone
-    if mem.role == MemberRole.MEMBER and bazar_in.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Members can only record their own bazar expenses",
-        )
+    # If regular member, strictly enforce user_id is current_user.id
+    target_user_id = bazar_in.user_id
+    if mem.role == MemberRole.MEMBER:
+        if bazar_in.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Members can only record their own bazar expenses",
+            )
+        target_user_id = current_user.id
+        status_val = BazarStatus.PENDING
+        approved_by = None
+        approved_at = None
+    else:
+        status_val = BazarStatus.APPROVED
+        approved_by = current_user.id
+        approved_at = datetime.utcnow()
 
     bazar = Bazar(
         mess_id=mess_id,
-        user_id=bazar_in.user_id,
+        user_id=target_user_id,
         date=bazar_in.date,
         amount=bazar_in.amount,
         items=bazar_in.items,
         receipt_url=bazar_in.receipt_url,
         notes=bazar_in.notes,
+        status=status_val,
+        approved_by=approved_by,
+        approved_at=approved_at,
     )
     db.add(bazar)
     await db.commit()
@@ -124,6 +144,62 @@ async def create_bazar(
         items=bazar.items,
         receipt_url=bazar.receipt_url,
         notes=bazar.notes,
+        status=bazar.status,
+        approved_by=bazar.approved_by,
+        approved_at=bazar.approved_at,
+        rejection_reason=bazar.rejection_reason,
+        created_at=bazar.created_at,
+    )
+
+@router.patch("/{bazar_id}/review", response_model=BazarResponse)
+@router.patch("/{bazar_id}/review/", response_model=BazarResponse, include_in_schema=False)
+async def review_bazar(
+    mess_id: uuid.UUID,
+    bazar_id: uuid.UUID,
+    review_in: BazarReviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem = await get_membership_for_mess(mess_id, current_user, db)
+    if mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Manager or Owner can approve or reject bazar expenses",
+        )
+
+    stmt = select(Bazar).options(selectinload(Bazar.user)).where(Bazar.id == bazar_id, Bazar.mess_id == mess_id)
+    bazar = (await db.execute(stmt)).scalar_one_or_none()
+    if not bazar:
+        raise HTTPException(status_code=404, detail="Bazar record not found")
+
+    if review_in.action == "approve":
+        bazar.status = BazarStatus.APPROVED
+        bazar.approved_by = current_user.id
+        bazar.approved_at = datetime.utcnow()
+        bazar.rejection_reason = None
+    elif review_in.action == "reject":
+        bazar.status = BazarStatus.REJECTED
+        bazar.approved_by = current_user.id
+        bazar.approved_at = datetime.utcnow()
+        bazar.rejection_reason = review_in.rejection_reason or "ম্যানেজার কর্তৃক প্রত্যাখ্যাত"
+
+    await db.commit()
+    await db.refresh(bazar)
+
+    return BazarResponse(
+        id=bazar.id,
+        mess_id=bazar.mess_id,
+        user_id=bazar.user_id,
+        user_name=bazar.user.name if bazar.user else "Member",
+        date=bazar.date,
+        amount=bazar.amount,
+        items=bazar.items,
+        receipt_url=bazar.receipt_url,
+        notes=bazar.notes,
+        status=bazar.status,
+        approved_by=bazar.approved_by,
+        approved_at=bazar.approved_at,
+        rejection_reason=bazar.rejection_reason,
         created_at=bazar.created_at,
     )
 

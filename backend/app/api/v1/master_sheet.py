@@ -18,7 +18,7 @@ from app.models.meal import Meal
 from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
-from app.models.enums import FixedCostCategory
+from app.models.enums import FixedCostCategory, BazarStatus
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.master_sheet import (
     MasterSheetResponse,
@@ -75,7 +75,7 @@ async def get_master_sheet(
     )
     meals = (await db.execute(stmt_meals)).scalars().all()
 
-    # 5. Bazars for the month
+    # 5. Bazars for the month (only approved entries count in calculations)
     stmt_bazars = (
         select(Bazar)
         .options(selectinload(Bazar.user))
@@ -83,6 +83,7 @@ async def get_master_sheet(
             Bazar.mess_id == mess_id,
             Bazar.date >= start_date,
             Bazar.date <= end_date,
+            Bazar.status == BazarStatus.APPROVED,
         )
         .order_by(Bazar.date.asc(), Bazar.created_at.asc())
     )
