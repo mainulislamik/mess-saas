@@ -80,13 +80,11 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           { href: "/dashboard/messes", label: "মেস সেটিংস ও সদস্য", icon: Building2 },
         ]
       : [
-          { href: "/dashboard", label: "আমার খতিয়ান ও হিসাব", icon: LayoutDashboard },
-          { href: "/dashboard/master-sheet", label: "মেস মাস্টার শিট", icon: Table },
+          { href: "/dashboard", label: "আমার খতিয়ান ও হিসাব", icon: LayoutDashboard },
           { href: "/dashboard/meals", label: "আমার মিল রিকোয়েস্ট", icon: CalendarCheck },
+          { href: "/dashboard/master-sheet", label: "মেস মাস্টার শিট", icon: Table },
           { href: "/dashboard/bazar", label: "বাজার শিডিউল ও তালিকা", icon: ShoppingBag },
           { href: "/dashboard/menu", label: "খাবারের মেন্যু ও ভোট", icon: UtensilsCrossed },
-          { href: "/dashboard/maid-gas", label: "বুয়া হাজিরা ও গ্যাস", icon: Users2 },
-          { href: "/dashboard/whatsapp", label: "হোয়াটসঅ্যাপ ডাইজেস্ট বট", icon: MessageSquare },
         ];
 
   return (
@@ -125,10 +123,10 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               </div>
               <div>
                 <h1 className="font-extrabold text-slate-900 text-base leading-tight tracking-tight">
-                  মেস ম্যানেজার
+                  মেস ম্যানেজার বিডি
                 </h1>
                 <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">
-                  Smart Mess OS
+                  {portalMode === "manager" ? "ম্যানেজমেন্ট প্যানেল" : "সদস্য পোর্টাল"}
                 </p>
               </div>
             </Link>
