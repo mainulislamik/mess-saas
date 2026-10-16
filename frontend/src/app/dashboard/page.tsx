@@ -28,21 +28,13 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
-  if (portalMode === "member") {
-    return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <MemberDashboardView />
-      </main>
-    );
-  }
-
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/login");
       return;
     }
 
-    if (currentMess) {
+    if (currentMess && portalMode !== "member") {
       setLoadingStats(true);
       api.get(`/messes/${currentMess.id}/dashboard`)
         .then((res) => {
@@ -55,13 +47,21 @@ export default function DashboardPage() {
           setLoadingStats(false);
         });
     }
-  }, [user, currentMess, isLoading, router]);
+  }, [user, currentMess, isLoading, router, portalMode]);
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
       </div>
+    );
+  }
+
+  if (portalMode === "member") {
+    return (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <MemberDashboardView />
+      </main>
     );
   }
 
