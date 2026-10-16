@@ -14,6 +14,7 @@ from app.models.meal import Meal
 from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
+from app.models.member_rent import MemberMonthlyRent
 from app.models.closing import MonthlyClosing
 from app.models.enums import MemberRole, FixedCostCategory, BazarStatus
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
@@ -87,11 +88,30 @@ async def calculate_monthly_closing_data(
     )
     fixed_costs = (await db.execute(fc_stmt)).scalars().all()
 
+    # Fetch month-specific rents if available
+    rent_stmt = select(MemberMonthlyRent).where(
+        MemberMonthlyRent.mess_id == mess_id,
+        MemberMonthlyRent.month == month,
+    )
+    month_rents = {r.user_id: r for r in (await db.execute(rent_stmt)).scalars().all()}
+
     shared_utilities = [fc for fc in fixed_costs if fc.category != FixedCostCategory.RENT]
     total_shared_utilities = round(sum(fc.amount for fc in shared_utilities), 2)
-    shared_utility_per_member = round(total_shared_utilities / member_count, 2) if member_count > 0 else 0.0
 
-    total_individual_rent = round(sum(m.rent_amount for m in memberships), 2)
+    # Active residents count
+    resident_count = len([m for m in memberships if month_rents.get(m.user_id, None) is None or month_rents[m.user_id].is_resident])
+    if resident_count == 0:
+        resident_count = member_count
+
+    shared_utility_per_member = round(total_shared_utilities / resident_count, 2) if resident_count > 0 else 0.0
+
+    total_individual_rent = round(
+        sum(
+            month_rents[m.user_id].total_rent if m.user_id in month_rents else m.rent_amount
+            for m in memberships
+        ),
+        2,
+    )
     fixed_cost_rent_sum = round(sum(fc.amount for fc in fixed_costs if fc.category == FixedCostCategory.RENT), 2)
     total_house_rent = total_individual_rent if total_individual_rent > 0 else fixed_cost_rent_sum
     total_fixed_cost = round(total_house_rent + total_shared_utilities, 2)
@@ -115,15 +135,27 @@ async def calculate_monthly_closing_data(
         m_meals = round(user_meals.get(m.user_id, 0.0), 2)
         m_meal_cost = round(m_meals * meal_rate, 2)
 
-        # Rent determination: member's individual rent_amount if set; fallback to equal rent split if rent entered as fixed_cost
-        if m.rent_amount > 0:
+        # Rent determination from MemberMonthlyRent
+        m_rent_rec = month_rents.get(m.user_id)
+        if m_rent_rec:
+            m_rent = m_rent_rec.total_rent
+            is_res = m_rent_rec.is_resident
+            seat_label_val = m_rent_rec.seat_label or m.seat_label
+        elif m.rent_amount > 0:
             m_rent = m.rent_amount
+            is_res = True
+            seat_label_val = m.seat_label
         elif total_individual_rent == 0 and fixed_cost_rent_sum > 0 and member_count > 0:
             m_rent = round(fixed_cost_rent_sum / member_count, 2)
+            is_res = True
+            seat_label_val = m.seat_label
         else:
             m_rent = 0.0
+            is_res = True
+            seat_label_val = m.seat_label
 
-        m_fixed_cost = round(m_rent + shared_utility_per_member, 2)
+        u_share = shared_utility_per_member if is_res else 0.0
+        m_fixed_cost = round(m_rent + u_share, 2)
         m_total_cost = round(m_meal_cost + m_fixed_cost, 2)
         m_deposit = round(user_deposits.get(m.user_id, 0.0), 2)
         m_balance = round(m_deposit - m_total_cost, 2)
@@ -138,9 +170,9 @@ async def calculate_monthly_closing_data(
         members_summary.append(
             MemberClosingSummary(
                 user_id=m.user_id,
-                user_name=u.name if u else "Member",
+                user_name=u.name if u else "সদস্য",
                 phone=u.phone if u else None,
-                seat_label=m.seat_label,
+                seat_label=seat_label_val,
                 rent_amount=round(m_rent, 2),
                 shared_utility_share=shared_utility_per_member,
                 total_meals=m_meals,

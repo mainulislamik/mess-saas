@@ -18,6 +18,7 @@ import {
   Calendar,
   DollarSign,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Clock,
   Layers,
@@ -26,16 +27,25 @@ import {
   X,
   RefreshCw,
   Info,
+  Check,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 
-interface MemberItem {
-  id: string;
+interface MemberRentItem {
   user_id: string;
   user_name: string;
-  phone: string;
+  phone?: string | null;
   role: string;
-  seat_label: string | null;
-  rent_amount: number;
+  seat_label?: string | null;
+  base_seat_rent: number;
+  vacancy_adjustment: number;
+  total_rent: number;
+  rent_amount?: number;
+  is_resident: boolean;
+  shared_utility_share?: number;
+  final_payable?: number;
+  notes?: string | null;
 }
 
 interface UtilityItem {
@@ -71,12 +81,25 @@ export default function RentUtilitiesPage() {
 
   const [month, setMonth] = useState("");
   const [activeTab, setActiveTab] = useState<"rent" | "utilities" | "tracker" | "summary">("rent");
-  const [members, setMembers] = useState<MemberItem[]>([]);
+  const [members, setMembers] = useState<MemberRentItem[]>([]);
   const [utilities, setUtilities] = useState<UtilityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingRent, setSavingRent] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Reconciliation Meter States
+  const [targetHouseRent, setTargetHouseRent] = useState<number>(0);
+  const [totalAllocatedRent, setTotalAllocatedRent] = useState<number>(0);
+  const [shortfall, setShortfall] = useState<number>(0);
+  const [sharedUtilityPerResident, setSharedUtilityPerResident] = useState<number>(0);
+  const [activeResidentCount, setActiveResidentCount] = useState<number>(0);
+
+  // Shortfall Modal State
+  const [showShortfallModal, setShowShortfallModal] = useState<boolean>(false);
+  const [shortfallMode, setShortfallMode] = useState<"equal" | "custom">("equal");
+  const [distributingShortfall, setDistributingShortfall] = useState<boolean>(false);
+  const [customAdjustments, setCustomAdjustments] = useState<Record<string, number>>({});
 
   // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -106,22 +129,19 @@ export default function RentUtilitiesPage() {
     setStatusMessage(null);
     try {
       const targetMonth = month || new Date().toISOString().slice(0, 7);
-      const [membersRes, utilsRes] = await Promise.all([
-        api.get(`/messes/${currentMess.id}/members`),
+      const [rentRes, utilsRes] = await Promise.all([
+        api.get(`/messes/${currentMess.id}/monthly-rent?month=${targetMonth}`),
         api.get(`/messes/${currentMess.id}/fixed-costs?month=${targetMonth}`),
       ]);
 
-      const formattedMembers = (membersRes.data || []).map((m: any) => ({
-        id: m.id,
-        user_id: m.user_id,
-        user_name: m.user_name || m.user?.name || "সদস্য",
-        phone: m.phone || m.user?.phone || "",
-        role: m.role || "member",
-        seat_label: m.seat_label || "",
-        rent_amount: Number(m.rent_amount) || 0,
-      }));
+      const rentData = rentRes.data;
+      setTargetHouseRent(rentData.target_house_rent || 0);
+      setTotalAllocatedRent(rentData.total_allocated_rent || 0);
+      setShortfall(rentData.shortfall || 0);
+      setSharedUtilityPerResident(rentData.shared_utility_per_resident || 0);
+      setActiveResidentCount(rentData.active_resident_count || 0);
+      setMembers(rentData.members || []);
 
-      setMembers(formattedMembers);
       const items = Array.isArray(utilsRes.data)
         ? utilsRes.data
         : (utilsRes.data?.items || []);
@@ -148,39 +168,55 @@ export default function RentUtilitiesPage() {
   }, [user, currentMess, isLoading, month]);
 
   // Handle Rent Field Updates
-  const handleMemberChange = (userId: string, field: "seat_label" | "rent_amount", value: any) => {
+  const handleMemberChange = (
+    userId: string,
+    field: "seat_label" | "base_seat_rent" | "vacancy_adjustment" | "is_resident" | "notes",
+    value: any
+  ) => {
     setMembers((prev) =>
       prev.map((m) => {
         if (m.user_id === userId) {
-          return {
+          const updated = {
             ...m,
-            [field]: field === "rent_amount" ? parseFloat(value) || 0 : value,
+            [field]:
+              field === "base_seat_rent" || field === "vacancy_adjustment"
+                ? parseFloat(value) || 0
+                : value,
           };
+          updated.total_rent =
+            (Number(updated.base_seat_rent) || 0) + (Number(updated.vacancy_adjustment) || 0);
+          return updated;
         }
         return m;
       })
     );
   };
 
-  // Save Rent Batch
+  // Save Rent Batch (Specific to this month - historical data safe)
   const handleSaveRentBatch = async () => {
     if (!currentMess?.id || !isManagerOrOwner) return;
     setSavingRent(true);
     setStatusMessage(null);
     try {
       const payload = {
+        month: month || new Date().toISOString().slice(0, 7),
+        target_house_rent: Number(targetHouseRent) || 0,
         members: members.map((m) => ({
           user_id: m.user_id,
-          rent_amount: Number(m.rent_amount) || 0,
           seat_label: m.seat_label || null,
+          base_seat_rent: Number(m.base_seat_rent) || 0,
+          vacancy_adjustment: Number(m.vacancy_adjustment) || 0,
+          is_resident: m.is_resident,
+          notes: m.notes || null,
         })),
       };
 
-      await api.patch(`/messes/${currentMess.id}/members-rent`, payload);
+      await api.patch(`/messes/${currentMess.id}/monthly-rent`, payload);
       setStatusMessage({
         type: "success",
-        text: "সদস্যদের সিট/রুমের বাড়িভাড়া সফলভাবে আপডেট হয়েছে!",
+        text: `${month} মাসের বাড়িভাড়া সফলভাবে সংরক্ষিত হয়েছে! পূর্ববর্তী বা পরবর্তী মাসের কোনো হিসাব পরিবর্তিত হবে না।`,
       });
+      fetchData();
     } catch (err: any) {
       console.error(err);
       setStatusMessage({
@@ -189,6 +225,29 @@ export default function RentUtilitiesPage() {
       });
     } finally {
       setSavingRent(false);
+    }
+  };
+
+  // Distribute Shortfall
+  const handleDistributeShortfall = async () => {
+    if (!currentMess?.id || !isManagerOrOwner) return;
+    setDistributingShortfall(true);
+    try {
+      await api.post(`/messes/${currentMess.id}/monthly-rent/distribute-shortfall`, {
+        month: month || new Date().toISOString().slice(0, 7),
+        mode: shortfallMode,
+        adjustments: shortfallMode === "custom" ? customAdjustments : undefined,
+      });
+      setShowShortfallModal(false);
+      setStatusMessage({
+        type: "success",
+        text: "খালি সিটের ঘাটতি মেম্বারদের ভাড়ার সাথে সফলভাবে সমন্বয় করা হয়েছে!",
+      });
+      fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.detail || "ঘাটতি বণ্টন ব্যর্থ হয়েছে");
+    } finally {
+      setDistributingShortfall(false);
     }
   };
 
@@ -255,9 +314,28 @@ export default function RentUtilitiesPage() {
 
   // Calculations
   const memberCount = members.length;
-  const totalIndividualRent = useMemo(() => {
-    return members.reduce((sum, m) => sum + (Number(m.rent_amount) || 0), 0);
+  const effectiveResidentCount = useMemo(() => {
+    const resCount = members.filter((m) => m.is_resident).length;
+    return resCount > 0 ? resCount : memberCount;
+  }, [members, memberCount]);
+
+  const totalAllocatedRentComputed = useMemo(() => {
+    return members.reduce(
+      (sum, m) =>
+        sum +
+        (Number(m.total_rent) ||
+          (Number(m.base_seat_rent) || 0) + (Number(m.vacancy_adjustment) || 0) ||
+          Number(m.rent_amount) ||
+          0),
+      0
+    );
   }, [members]);
+
+  const calculatedShortfall = useMemo(() => {
+    return totalAllocatedRentComputed - targetHouseRent;
+  }, [totalAllocatedRentComputed, targetHouseRent]);
+
+  const totalIndividualRent = totalAllocatedRentComputed;
 
   const sharedUtilities = useMemo(() => {
     return utilities.filter((u) => u.category !== "rent");
@@ -268,10 +346,10 @@ export default function RentUtilitiesPage() {
   }, [sharedUtilities]);
 
   const sharedPerMember = useMemo(() => {
-    return memberCount > 0 ? totalSharedUtilities / memberCount : 0;
-  }, [totalSharedUtilities, memberCount]);
+    return effectiveResidentCount > 0 ? totalSharedUtilities / effectiveResidentCount : 0;
+  }, [totalSharedUtilities, effectiveResidentCount]);
 
-  const totalFlatCost = totalIndividualRent + totalSharedUtilities;
+  const totalFlatCost = (targetHouseRent > 0 ? targetHouseRent : totalAllocatedRentComputed) + totalSharedUtilities;
 
   // Gas and Electricity Items
   const gasItems = useMemo(() => utilities.filter((u) => u.category === "gas"), [utilities]);
@@ -374,80 +452,182 @@ export default function RentUtilitiesPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {/* Total Flat Cost */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               মোট ফ্ল্যাট খরচ
             </span>
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+            <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
               <Layers className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-black text-slate-800">
-              ৳{totalFlatCost.toLocaleString()}
+            <span className="text-xl font-black text-slate-800">
+              ৳{Math.round(totalFlatCost).toLocaleString()}
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">ভাড়া ও শেয়ার্ড ইউটিলিটি মিলিয়ে</p>
+          <p className="text-[11px] text-slate-500 mt-1">ভাড়া ও শেয়ার্ড বিল মিলিয়ে</p>
         </div>
 
-        {/* Total House Rent */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs">
+        {/* Target House Rent to Landlord */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              মোট বাড়িভাড়া
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              বাড়িওয়ালার চুক্তি ভাড়া
             </span>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
               <Home className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-black text-blue-700">
-              ৳{totalIndividualRent.toLocaleString()}
-            </span>
+          <div className="mt-2 flex items-center gap-1.5">
+            {isManagerOrOwner ? (
+              <div className="relative w-full">
+                <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">৳</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={targetHouseRent === 0 ? "" : targetHouseRent}
+                  placeholder="ফ্ল্যাট ভাড়া (যেমন: ২৫০০০)"
+                  onChange={(e) => setTargetHouseRent(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-6 pr-2 py-1 text-sm font-black text-blue-700 focus:bg-white focus:border-indigo-500 outline-hidden"
+                />
+              </div>
+            ) : (
+              <span className="text-xl font-black text-blue-700">
+                ৳{targetHouseRent.toLocaleString()}
+              </span>
+            )}
           </div>
-          <p className="text-xs text-slate-500 mt-1">সব মেম্বারের সিট ভাড়া যোগফল</p>
+          <p className="text-[11px] text-slate-500 mt-1">ফ্ল্যাটের মূল মাসিক ভাড়া</p>
         </div>
 
-        {/* Total Shared Utilities */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs">
+        {/* Total Allocated Member Rent */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              শেয়ার্ড ইউটিলিটি
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              বরাদ্দকৃত মোট ভাড়া
             </span>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-              <Sparkles className="w-4 h-4" />
+            <div className="p-1.5 bg-sky-50 text-sky-600 rounded-lg">
+              <Layers className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-black text-purple-700">
-              ৳{totalSharedUtilities.toLocaleString()}
+            <span className="text-xl font-black text-sky-700">
+              ৳{Math.round(totalAllocatedRentComputed).toLocaleString()}
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">বুয়া, গ্যাস, বিদ্যুৎ, ওয়াইফাই, ময়লা</p>
+          <p className="text-[11px] text-slate-500 mt-1">সব মেম্বারের সিট ভাড়ার যোগফল</p>
         </div>
 
-        {/* Per Member Utility Share */}
-        <div className="bg-white p-4.5 rounded-2xl border border-slate-200 shadow-xs">
+        {/* Shortfall / Balance Meter */}
+        <div
+          className={`p-4 rounded-2xl border shadow-xs ${
+            calculatedShortfall < 0
+              ? "bg-rose-50/60 border-rose-200 text-rose-900"
+              : calculatedShortfall === 0
+              ? "bg-emerald-50/60 border-emerald-200 text-emerald-900"
+              : "bg-blue-50/60 border-blue-200 text-blue-900"
+          }`}
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            <span className="text-[11px] font-bold uppercase tracking-wider">
+              {calculatedShortfall < 0 ? "খালি সিটের ঘাটতি" : "ভাড়া সমন্বয় স্ট্যাটাস"}
+            </span>
+            <div
+              className={`p-1.5 rounded-lg ${
+                calculatedShortfall < 0
+                  ? "bg-rose-100 text-rose-700"
+                  : "bg-emerald-100 text-emerald-700"
+              }`}
+            >
+              {calculatedShortfall < 0 ? (
+                <AlertTriangle className="w-4 h-4" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline gap-1">
+            <span
+              className={`text-xl font-black ${
+                calculatedShortfall < 0 ? "text-rose-700" : "text-emerald-700"
+              }`}
+            >
+              {calculatedShortfall < 0
+                ? `-৳${Math.abs(calculatedShortfall).toLocaleString()}`
+                : calculatedShortfall === 0
+                ? "৳০ (সমন্বিত)"
+                : `+৳${calculatedShortfall.toLocaleString()}`}
+            </span>
+          </div>
+          <p className="text-[11px] opacity-80 mt-1">
+            {calculatedShortfall < 0
+              ? "খালি সিটের ঘাটতি মেম্বারদের মাঝে বণ্টনযোগ্য"
+              : "ফ্ল্যাট ভাড়া সম্পূর্ণ সমন্বিত"}
+          </p>
+        </div>
+
+        {/* Per Resident Utility Share */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               জনপ্রতি ইউটিলিটি
             </span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+            <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-1">
-            <span className="text-2xl font-black text-emerald-700">
+            <span className="text-xl font-black text-purple-700">
               ৳{Math.round(sharedPerMember).toLocaleString()}
             </span>
             <span className="text-xs text-slate-500">/ জন</span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">{memberCount} জন সক্রিয় সদস্যের মধ্যে সমবণ্টন</p>
+          <p className="text-[11px] text-slate-500 mt-1">
+            {effectiveResidentCount} জন মেস বাসিন্দার মাঝে সমবণ্টন
+          </p>
         </div>
       </div>
+
+      {/* Shortfall Action Banner */}
+      {calculatedShortfall < 0 && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-rose-100 text-rose-700 rounded-xl shrink-0">
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-rose-900">
+                বাড়িভাড়ায় ৳{Math.abs(calculatedShortfall).toLocaleString()} ঘাটতি রয়েছে (খালি সিট বা অপরিশোধিত অংশ)
+              </h4>
+              <p className="text-xs text-rose-700 mt-0.5">
+                বাড়িওয়ালার চুক্তি ভাড়া ৳{targetHouseRent.toLocaleString()} কিন্তু মেম্বারদের সিট থেকে উঠছে ৳{Math.round(totalAllocatedRentComputed).toLocaleString()}। বাকি সদস্যদের মাঝে এই ঘাটতি সমন্বয় করতে বোতামটি চাপুন।
+              </p>
+            </div>
+          </div>
+          {isManagerOrOwner && (
+            <button
+              onClick={() => {
+                // Initialize custom adjustments with equal share
+                const def = Math.abs(calculatedShortfall);
+                const equalShare = effectiveResidentCount > 0 ? Math.round(def / effectiveResidentCount) : 0;
+                const initMap: Record<string, number> = {};
+                members.forEach((m) => {
+                  initMap[m.user_id] = m.is_resident ? equalShare : 0;
+                });
+                setCustomAdjustments(initMap);
+                setShowShortfallModal(true);
+              }}
+              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 self-start sm:self-auto"
+            >
+              <Zap className="w-4 h-4" />
+              <span>খালি সিটের ঘাটতি বণ্টন করুন</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div className="flex border-b border-slate-200 bg-white px-3 pt-2 rounded-t-2xl">
@@ -543,24 +723,63 @@ export default function RentUtilitiesPage() {
                 <thead>
                   <tr className="border-b border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-500 bg-slate-50/60">
                     <th className="py-3 px-4">মেম্বার</th>
-                    <th className="py-3 px-4">মোবাইল নম্বর</th>
+                    <th className="py-3 px-4 text-center">আবাসিক স্ট্যাটাস</th>
                     <th className="py-3 px-4">রোল</th>
-                    <th className="py-3 px-4">রুম / সিটের নাম (Seat Label)</th>
-                    <th className="py-3 px-4 w-48">বাড়িভাড়া (৳)</th>
+                    <th className="py-3 px-4">রুম / সিটের নাম</th>
+                    <th className="py-3 px-4 w-36">মূল সিট ভাড়া (৳)</th>
+                    <th className="py-3 px-4 w-32">খালি সিট সমন্বয় (৳)</th>
+                    <th className="py-3 px-4 text-right">চূড়ান্ত বাড়িভাড়া</th>
                     <th className="py-3 px-4 text-right">শেয়ার্ড ইউটিলিটি</th>
-                    <th className="py-3 px-4 text-right">মোট ফিক্সড বিল</th>
+                    <th className="py-3 px-4 text-right">সর্বমোট প্রদেয়</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {members.map((m) => {
-                    const memberTotal = (m.rent_amount || 0) + sharedPerMember;
+                    const baseRent = Number(m.base_seat_rent) || 0;
+                    const vacAdj = Number(m.vacancy_adjustment) || 0;
+                    const memberRent = baseRent + vacAdj;
+                    const memberUtility = m.is_resident ? sharedPerMember : 0;
+                    const memberTotal = memberRent + memberUtility;
                     return (
-                      <tr key={m.user_id} className="hover:bg-slate-50/70 transition-colors">
+                      <tr
+                        key={m.user_id}
+                        className={`hover:bg-slate-50/70 transition-colors ${
+                          !m.is_resident ? "opacity-75 bg-slate-50/40" : ""
+                        }`}
+                      >
                         <td className="py-3.5 px-4 font-semibold text-slate-800">
                           {m.user_name}
                         </td>
-                        <td className="py-3.5 px-4 text-slate-500 font-mono text-xs">
-                          {m.phone || "—"}
+                        <td className="py-3.5 px-4 text-center">
+                          {isManagerOrOwner ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleMemberChange(m.user_id, "is_resident", !m.is_resident)
+                              }
+                              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 mx-auto cursor-pointer ${
+                                m.is_resident
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs"
+                                  : "bg-slate-200 text-slate-600 border border-slate-300"
+                              }`}
+                              title={
+                                m.is_resident
+                                  ? "ক্লিক করে অনাবাসিক করুন (ইউটিলিটি ভাগ পাবে না)"
+                                  : "ক্লিক করে মেস বাসিন্দা করুন"
+                              }
+                            >
+                              {m.is_resident ? (
+                                <UserCheck className="w-3.5 h-3.5 text-emerald-700" />
+                              ) : (
+                                <UserX className="w-3.5 h-3.5 text-slate-500" />
+                              )}
+                              <span>{m.is_resident ? "বসবাসকারী" : "অনাবাসিক"}</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                              {m.is_resident ? "বসবাসকারী" : "অনাবাসিক"}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3.5 px-4">
                           <span
@@ -579,7 +798,9 @@ export default function RentUtilitiesPage() {
                               type="text"
                               value={m.seat_label || ""}
                               placeholder="যেমন: Room 101, Bed 2"
-                              onChange={(e) => handleMemberChange(m.user_id, "seat_label", e.target.value)}
+                              onChange={(e) =>
+                                handleMemberChange(m.user_id, "seat_label", e.target.value)
+                              }
                               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:bg-white focus:border-indigo-500 outline-hidden"
                             />
                           ) : (
@@ -593,21 +814,54 @@ export default function RentUtilitiesPage() {
                               <input
                                 type="number"
                                 min="0"
-                                value={m.rent_amount === 0 ? "" : m.rent_amount}
+                                value={m.base_seat_rent === 0 ? "" : m.base_seat_rent}
                                 placeholder="0"
-                                onChange={(e) => handleMemberChange(m.user_id, "rent_amount", e.target.value)}
+                                onChange={(e) =>
+                                  handleMemberChange(m.user_id, "base_seat_rent", e.target.value)
+                                }
                                 className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-6 pr-2.5 py-1.5 text-sm font-bold text-slate-800 focus:bg-white focus:border-indigo-500 outline-hidden"
                               />
                             </div>
                           ) : (
-                            <span className="font-bold text-slate-800">৳{m.rent_amount.toLocaleString()}</span>
+                            <span className="font-bold text-slate-800">৳{baseRent.toLocaleString()}</span>
                           )}
                         </td>
-                        <td className="py-3.5 px-4 text-right text-xs text-slate-600 font-medium">
-                          ৳{Math.round(sharedPerMember).toLocaleString()}
+                        <td className="py-3.5 px-4">
+                          {isManagerOrOwner ? (
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-1.5 text-xs font-bold text-slate-400">৳</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={m.vacancy_adjustment === 0 ? "" : m.vacancy_adjustment}
+                                placeholder="0"
+                                onChange={(e) =>
+                                  handleMemberChange(m.user_id, "vacancy_adjustment", e.target.value)
+                                }
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-6 pr-2.5 py-1.5 text-xs font-bold text-rose-700 focus:bg-white focus:border-rose-500 outline-hidden"
+                                title="খালি সিটের ঘাটতি বাবদ অতিরিক্ত শেয়ার"
+                              />
+                            </div>
+                          ) : (
+                            <span className="text-xs font-bold text-rose-700">
+                              {vacAdj > 0 ? `+৳${vacAdj.toLocaleString()}` : "—"}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <span className="font-black text-indigo-700 text-sm">
+                          <span className="font-extrabold text-blue-800 text-sm">
+                            ৳{memberRent.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right text-xs text-slate-600 font-medium">
+                          {m.is_resident ? (
+                            `৳${Math.round(sharedPerMember).toLocaleString()}`
+                          ) : (
+                            <span className="text-slate-400 font-normal">অনাবাসিক (৳০)</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <span className="font-black text-indigo-700 text-base">
                             ৳{Math.round(memberTotal).toLocaleString()}
                           </span>
                         </td>
@@ -618,12 +872,18 @@ export default function RentUtilitiesPage() {
                 <tfoot>
                   <tr className="bg-slate-50/80 font-bold border-t border-slate-200 text-slate-800">
                     <td className="py-3 px-4" colSpan={4}>
-                      সর্বমোট বাড়িভাড়া (সব মেম্বার)
+                      সর্বমোট যোগফল ({month} মাস)
                     </td>
-                    <td className="py-3 px-4 text-blue-700 font-black text-base">
+                    <td className="py-3 px-4 text-slate-700 font-bold">
+                      ৳{members.reduce((s, m) => s + (Number(m.base_seat_rent) || 0), 0).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4 text-rose-700 font-bold">
+                      ৳{members.reduce((s, m) => s + (Number(m.vacancy_adjustment) || 0), 0).toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4 text-right text-blue-700 font-black text-base">
                       ৳{totalIndividualRent.toLocaleString()}
                     </td>
-                    <td className="py-3 px-4 text-right text-purple-700">
+                    <td className="py-3 px-4 text-right text-purple-700 font-bold">
                       ৳{totalSharedUtilities.toLocaleString()}
                     </td>
                     <td className="py-3 px-4 text-right text-indigo-800 font-black text-base">
@@ -970,14 +1230,42 @@ export default function RentUtilitiesPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {members.map((m) => {
-                  const rent = m.rent_amount || 0;
-                  const total = rent + sharedPerMember;
+                  const baseRent = Number(m.base_seat_rent) || 0;
+                  const vacAdj = Number(m.vacancy_adjustment) || 0;
+                  const rent = baseRent + vacAdj;
+                  const utility = m.is_resident ? sharedPerMember : 0;
+                  const total = rent + utility;
                   return (
-                    <tr key={m.user_id} className="hover:bg-slate-50/70">
-                      <td className="py-3 px-4 font-semibold text-slate-800">{m.user_name}</td>
+                    <tr
+                      key={m.user_id}
+                      className={`hover:bg-slate-50/70 ${
+                        !m.is_resident ? "opacity-75 bg-slate-50/50" : ""
+                      }`}
+                    >
+                      <td className="py-3 px-4 font-semibold text-slate-800">
+                        {m.user_name}
+                        {!m.is_resident && (
+                          <span className="ml-2 text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-bold">
+                            অনাবাসিক
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-slate-500 text-xs">{m.seat_label || "—"}</td>
-                      <td className="py-3 px-4 text-right font-bold text-blue-700">৳{rent.toLocaleString()}</td>
-                      <td className="py-3 px-4 text-right text-purple-700">৳{Math.round(sharedPerMember).toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right font-bold text-blue-700">
+                        ৳{rent.toLocaleString()}
+                        {vacAdj > 0 && (
+                          <span className="block text-[10px] text-rose-600 font-normal">
+                            (মূল ৳{baseRent.toLocaleString()} + খালি সিট ৳{vacAdj.toLocaleString()})
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right text-purple-700">
+                        {m.is_resident ? (
+                          `৳${Math.round(utility).toLocaleString()}`
+                        ) : (
+                          <span className="text-slate-400">অনাবাসিক (৳০)</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 text-right font-black text-slate-900 text-base">
                         ৳{Math.round(total).toLocaleString()}
                       </td>
@@ -1164,6 +1452,143 @@ export default function RentUtilitiesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Shortfall Distribution Modal */}
+      {showShortfallModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-rose-700">
+                <AlertTriangle className="w-5 h-5 text-rose-600" />
+                <h3 className="font-bold text-base text-slate-900">
+                  খালি সিটের ঘাটতি বণ্টন ও সমন্বয় ({month})
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShortfallModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 space-y-1 text-xs">
+              <div className="flex justify-between text-slate-700">
+                <span>বাড়িওয়ালার মোট চুক্তি ভাড়া:</span>
+                <span className="font-bold">৳{targetHouseRent.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-slate-700">
+                <span>মেম্বারদের মূল সিট ভাড়া যোগফল:</span>
+                <span className="font-bold">
+                  ৳{members.reduce((s, m) => s + (Number(m.base_seat_rent) || 0), 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between text-rose-800 font-extrabold pt-1 border-t border-rose-200/60">
+                <span>বণ্টনযোগ্য মোট ঘাটতি:</span>
+                <span>৳{Math.abs(calculatedShortfall).toLocaleString()}</span>
+              </div>
+            </div>
+
+            {/* Mode Selector */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700">বণ্টন পদ্ধতি নির্বাচন করুন:</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShortfallMode("equal")}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer text-left ${
+                    shortfallMode === "equal"
+                      ? "bg-indigo-50 border-indigo-300 text-indigo-900 shadow-xs"
+                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="block font-extrabold">১. সবার মাঝে সমান ভাগ</span>
+                  <span className="text-[10px] text-slate-500 font-normal">
+                    {effectiveResidentCount} জন মেস বাসিন্দার মাঝে সমবণ্টন
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShortfallMode("custom")}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition cursor-pointer text-left ${
+                    shortfallMode === "custom"
+                      ? "bg-indigo-50 border-indigo-300 text-indigo-900 shadow-xs"
+                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <span className="block font-extrabold">২. কাস্টম সমন্বয়</span>
+                  <span className="text-[10px] text-slate-500 font-normal">
+                    কাউকে বেশি বা কম নির্ধারণ
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Mode Details */}
+            {shortfallMode === "equal" ? (
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600">
+                {effectiveResidentCount > 0 ? (
+                  <p>
+                    মোট ঘাটতি ৳{Math.abs(calculatedShortfall).toLocaleString()} মেসের {effectiveResidentCount} জন বসবাসকারী মেম্বারের মাঝে সমানভাবে ভাগ হলে জনপ্রতি{" "}
+                    <span className="font-extrabold text-indigo-700">
+                      +৳{Math.round(Math.abs(calculatedShortfall) / effectiveResidentCount).toLocaleString()}
+                    </span>{" "}
+                    করে সিট ভাড়ার সাথে যোগ হবে। অনাবাসিক সদস্যদের কোনো অতিরিক্ত চার্জ হবে না।
+                  </p>
+                ) : (
+                  <p className="text-rose-600">কোনো সক্রিয় মেস বাসিন্দা পাওয়া যায়নি।</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                <span className="text-[11px] font-bold text-slate-500 uppercase">
+                  প্রতিটি মেম্বারের বাড়তি শেয়ার নির্ধারণ করুন:
+                </span>
+                {members.map((m) => (
+                  <div key={m.user_id} className="flex items-center justify-between gap-2 p-2 bg-slate-50 rounded-lg">
+                    <span className="text-xs font-semibold text-slate-800 truncate">
+                      {m.user_name} {!m.is_resident && "(অনাবাসিক)"}
+                    </span>
+                    <div className="relative w-28">
+                      <span className="absolute left-2 top-1 text-xs text-slate-400">৳</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={customAdjustments[m.user_id] ?? 0}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setCustomAdjustments((prev) => ({ ...prev, [m.user_id]: val }));
+                        }}
+                        className="w-full pl-5 pr-2 py-0.5 text-xs font-bold border border-slate-300 rounded bg-white text-right"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowShortfallModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+              >
+                বাতিল
+              </button>
+              <button
+                type="button"
+                disabled={distributingShortfall}
+                onClick={handleDistributeShortfall}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {distributingShortfall ? "প্রসেস হচ্ছে..." : "ঘাটতি সমন্বয় কার্যকর করুন"}
+              </button>
+            </div>
           </div>
         </div>
       )}

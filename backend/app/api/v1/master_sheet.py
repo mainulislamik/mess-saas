@@ -18,6 +18,7 @@ from app.models.meal import Meal
 from app.models.bazar import Bazar
 from app.models.deposit import Deposit
 from app.models.fixed_cost import FixedCost
+from app.models.member_rent import MemberMonthlyRent
 from app.models.enums import FixedCostCategory, BazarStatus
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
 from app.schemas.master_sheet import (
@@ -142,15 +143,34 @@ async def get_master_sheet(
     for dep in deposits:
         user_deposits[dep.user_id] = user_deposits.get(dep.user_id, 0.0) + dep.amount
 
+    # 8. Fetch month-specific rents if available
+    rent_stmt = select(MemberMonthlyRent).where(
+        MemberMonthlyRent.mess_id == mess_id,
+        MemberMonthlyRent.month == month,
+    )
+    month_rents = {r.user_id: r for r in (await db.execute(rent_stmt)).scalars().all()}
+
     # Aggregate Bazar & Fixed Cost & Utilities
     total_bazar = round(sum(b.amount for b in bazars), 2)
 
     # Shared utilities vs individual rent
     shared_utilities = [fc for fc in fixed_costs if fc.category != FixedCostCategory.RENT]
     total_shared_utilities = round(sum(fc.amount for fc in shared_utilities), 2)
-    shared_utility_per_member = round(total_shared_utilities / member_count, 2) if member_count > 0 else 0.0
 
-    total_individual_rent = round(sum(m.rent_amount for m in memberships), 2)
+    # Count active residents for this month
+    resident_count = len([m for m in memberships if month_rents.get(m.user_id, None) is None or month_rents[m.user_id].is_resident])
+    if resident_count == 0:
+        resident_count = member_count
+
+    shared_utility_per_member = round(total_shared_utilities / resident_count, 2) if resident_count > 0 else 0.0
+
+    total_individual_rent = round(
+        sum(
+            month_rents[m.user_id].total_rent if m.user_id in month_rents else m.rent_amount
+            for m in memberships
+        ),
+        2,
+    )
     fixed_cost_rent_sum = round(sum(fc.amount for fc in fixed_costs if fc.category == FixedCostCategory.RENT), 2)
     total_house_rent = total_individual_rent if total_individual_rent > 0 else fixed_cost_rent_sum
 
@@ -176,15 +196,27 @@ async def get_master_sheet(
         m_total = round(ut["total"], 2)
         m_cost = round(m_total * meal_rate, 2)
 
-        # Rent determination: member's individual rent_amount if set; fallback to equal rent split if rent entered as fixed_cost
-        if mem_obj.rent_amount > 0:
+        # Rent determination from MemberMonthlyRent
+        m_rent_rec = month_rents.get(uid)
+        if m_rent_rec:
+            m_rent = m_rent_rec.total_rent
+            is_res = m_rent_rec.is_resident
+            seat_label_val = m_rent_rec.seat_label or mem_obj.seat_label
+        elif mem_obj.rent_amount > 0:
             m_rent = mem_obj.rent_amount
+            is_res = True
+            seat_label_val = mem_obj.seat_label
         elif total_individual_rent == 0 and fixed_cost_rent_sum > 0 and member_count > 0:
             m_rent = round(fixed_cost_rent_sum / member_count, 2)
+            is_res = True
+            seat_label_val = mem_obj.seat_label
         else:
             m_rent = 0.0
+            is_res = True
+            seat_label_val = mem_obj.seat_label
 
-        f_share = round(m_rent + shared_utility_per_member, 2)
+        u_share = shared_utility_per_member if is_res else 0.0
+        f_share = round(m_rent + u_share, 2)
         t_cost = round(m_cost + f_share, 2)
         u_dep = round(user_deposits.get(uid, 0.0), 2)
         bal = round(u_dep - t_cost, 2)
@@ -206,7 +238,7 @@ async def get_master_sheet(
                 user_id=uid,
                 name=uname,
                 phone=uphone,
-                seat_label=mem_obj.seat_label,
+                seat_label=seat_label_val,
                 role=mem_obj.role.value if hasattr(mem_obj.role, "value") else str(mem_obj.role),
                 rent_amount=round(m_rent, 2),
                 shared_utility_share=shared_utility_per_member,

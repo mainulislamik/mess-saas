@@ -3,7 +3,7 @@ import string
 import uuid
 import re
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload, attributes
@@ -12,8 +12,16 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.mess import Mess
 from app.models.membership import Membership
-from app.models.enums import MemberRole
-from app.core.deps import get_current_user
+from app.models.fixed_cost import FixedCost
+from app.models.member_rent import MemberMonthlyRent
+from app.models.enums import MemberRole, FixedCostCategory
+from app.core.deps import get_current_user, get_safe_month
+from app.schemas.member_rent import (
+    MonthlyRentSummaryResponse,
+    MonthlyRentBatchUpdateRequest,
+    DistributeShortfallRequest,
+    MemberMonthlyRentItem,
+)
 from app.schemas.mess import (
     MessCreate,
     MessUpdate,
@@ -351,6 +359,309 @@ async def update_members_rent_batch(
         )
         for m in memberships
     ]
+
+@router.get("/{mess_id}/monthly-rent", response_model=MonthlyRentSummaryResponse)
+@router.get("/{mess_id}/monthly-rent/", response_model=MonthlyRentSummaryResponse, include_in_schema=False)
+async def get_monthly_rent_summary(
+    mess_id: uuid.UUID,
+    month: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem_result = await db.execute(
+        select(Membership).where(Membership.mess_id == mess_id, Membership.user_id == current_user.id)
+    )
+    current_mem = mem_result.scalar_one_or_none()
+    if not current_mem:
+        raise HTTPException(status_code=403, detail="You are not a member of this mess")
+
+    month = get_safe_month(month)
+
+    # 1. Fetch active memberships
+    stmt = (
+        select(Membership)
+        .options(selectinload(Membership.user))
+        .where(Membership.mess_id == mess_id, Membership.left_at.is_(None))
+        .order_by(Membership.joined_at.asc())
+    )
+    memberships = (await db.execute(stmt)).scalars().all()
+    if not memberships:
+        raise HTTPException(status_code=400, detail="মেসে কোনো সক্রিয় মেম্বার নেই")
+
+    # 2. Fetch existing MemberMonthlyRent for this month
+    rent_stmt = select(MemberMonthlyRent).where(
+        MemberMonthlyRent.mess_id == mess_id,
+        MemberMonthlyRent.month == month,
+    )
+    existing_rents = (await db.execute(rent_stmt)).scalars().all()
+    rent_map = {r.user_id: r for r in existing_rents}
+
+    # If no records exist for this month, check latest prior month to inherit
+    if not existing_rents:
+        prior_stmt = (
+            select(MemberMonthlyRent)
+            .where(MemberMonthlyRent.mess_id == mess_id, MemberMonthlyRent.month < month)
+            .order_by(MemberMonthlyRent.month.desc())
+        )
+        prior_rents = (await db.execute(prior_stmt)).scalars().all()
+        prior_map = {r.user_id: r for r in prior_rents}
+
+        # Auto-create records for this month inherited from prior month or membership
+        new_records = []
+        for m in memberships:
+            prior_r = prior_map.get(m.user_id)
+            if prior_r:
+                base_val = prior_r.base_seat_rent
+                vac_val = prior_r.vacancy_adjustment
+                is_res = prior_r.is_resident
+                s_label = prior_r.seat_label or m.seat_label
+                n_text = prior_r.notes
+            else:
+                base_val = m.rent_amount
+                vac_val = 0.0
+                is_res = True
+                s_label = m.seat_label
+                n_text = None
+
+            tot_val = round(base_val + vac_val, 2)
+            rec = MemberMonthlyRent(
+                mess_id=mess_id,
+                user_id=m.user_id,
+                month=month,
+                seat_label=s_label,
+                base_seat_rent=base_val,
+                vacancy_adjustment=vac_val,
+                total_rent=tot_val,
+                is_resident=is_res,
+                notes=n_text,
+            )
+            db.add(rec)
+            new_records.append(rec)
+
+        await db.commit()
+        for r in new_records:
+            await db.refresh(r)
+        rent_map = {r.user_id: r for r in new_records}
+
+    # 3. Fetch FixedCosts for this month
+    fc_stmt = select(FixedCost).where(
+        FixedCost.mess_id == mess_id,
+        FixedCost.month == month,
+    )
+    fixed_costs = (await db.execute(fc_stmt)).scalars().all()
+
+    target_house_rent = sum(fc.amount for fc in fixed_costs if fc.category == FixedCostCategory.RENT)
+    shared_utilities = sum(fc.amount for fc in fixed_costs if fc.category != FixedCostCategory.RENT)
+
+    # Active residents count
+    resident_count = len([m for m in memberships if rent_map.get(m.user_id) and rent_map[m.user_id].is_resident])
+    if resident_count == 0:
+        resident_count = len(memberships)
+
+    shared_utility_per_resident = round(shared_utilities / resident_count, 2) if resident_count > 0 else 0.0
+
+    member_items = []
+    total_allocated = 0.0
+
+    for m in memberships:
+        r = rent_map.get(m.user_id)
+        b_rent = r.base_seat_rent if r else m.rent_amount
+        v_adj = r.vacancy_adjustment if r else 0.0
+        t_rent = r.total_rent if r else round(b_rent + v_adj, 2)
+        is_res = r.is_resident if r else True
+        s_label = r.seat_label if r else m.seat_label
+        notes = r.notes if r else None
+
+        total_allocated += t_rent
+        u_share = shared_utility_per_resident if is_res else 0.0
+        final_payable = round(t_rent + u_share, 2)
+
+        role_str = "ম্যানেজার" if m.role in [MemberRole.OWNER, MemberRole.MANAGER] else "সদস্য"
+
+        member_items.append(
+            MemberMonthlyRentItem(
+                user_id=m.user_id,
+                user_name=m.user.name if m.user else "সদস্য",
+                phone=m.user.phone if m.user else None,
+                role=role_str,
+                seat_label=s_label,
+                base_seat_rent=b_rent,
+                vacancy_adjustment=v_adj,
+                total_rent=t_rent,
+                is_resident=is_res,
+                shared_utility_share=u_share,
+                final_payable=final_payable,
+                notes=notes,
+            )
+        )
+
+    shortfall = round(total_allocated - target_house_rent, 2)
+
+    return MonthlyRentSummaryResponse(
+        month=month,
+        target_house_rent=round(target_house_rent, 2),
+        total_allocated_rent=round(total_allocated, 2),
+        shortfall=shortfall,
+        total_shared_utilities=round(shared_utilities, 2),
+        shared_utility_per_resident=shared_utility_per_resident,
+        active_resident_count=resident_count,
+        members=member_items,
+    )
+
+@router.patch("/{mess_id}/monthly-rent", response_model=MonthlyRentSummaryResponse)
+@router.patch("/{mess_id}/monthly-rent/", response_model=MonthlyRentSummaryResponse, include_in_schema=False)
+async def update_monthly_rent_batch(
+    mess_id: uuid.UUID,
+    payload: MonthlyRentBatchUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem_result = await db.execute(
+        select(Membership).where(Membership.mess_id == mess_id, Membership.user_id == current_user.id)
+    )
+    current_mem = mem_result.scalar_one_or_none()
+    if not current_mem or current_mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="শুধুমাত্র ম্যানেজার বা মেস ওনার বাড়িভাড়া নির্ধারণ করতে পারবেন",
+        )
+
+    month = payload.month
+
+    # 1. Target house rent
+    if payload.target_house_rent is not None:
+        fc_stmt = select(FixedCost).where(
+            FixedCost.mess_id == mess_id,
+            FixedCost.month == month,
+            FixedCost.category == FixedCostCategory.RENT,
+        )
+        existing_rent_fc = (await db.execute(fc_stmt)).scalar_one_or_none()
+        if existing_rent_fc:
+            existing_rent_fc.amount = payload.target_house_rent
+        else:
+            new_fc = FixedCost(
+                mess_id=mess_id,
+                month=month,
+                category=FixedCostCategory.RENT,
+                title="বাড়িওয়ালার ফ্ল্যাট ভাড়া",
+                amount=payload.target_house_rent,
+                split_type="equal",
+            )
+            db.add(new_fc)
+
+    # 2. Member records
+    rent_stmt = select(MemberMonthlyRent).where(
+        MemberMonthlyRent.mess_id == mess_id,
+        MemberMonthlyRent.month == month,
+    )
+    existing_rents = (await db.execute(rent_stmt)).scalars().all()
+    rent_map = {r.user_id: r for r in existing_rents}
+
+    for item in payload.members:
+        rec = rent_map.get(item.user_id)
+        tot_val = round(item.base_seat_rent + item.vacancy_adjustment, 2)
+        if rec:
+            rec.base_seat_rent = item.base_seat_rent
+            rec.vacancy_adjustment = item.vacancy_adjustment
+            rec.total_rent = tot_val
+            rec.is_resident = item.is_resident
+            if item.seat_label is not None:
+                rec.seat_label = item.seat_label
+            if item.notes is not None:
+                rec.notes = item.notes
+        else:
+            rec = MemberMonthlyRent(
+                mess_id=mess_id,
+                user_id=item.user_id,
+                month=month,
+                seat_label=item.seat_label,
+                base_seat_rent=item.base_seat_rent,
+                vacancy_adjustment=item.vacancy_adjustment,
+                total_rent=tot_val,
+                is_resident=item.is_resident,
+                notes=item.notes,
+            )
+            db.add(rec)
+
+    await db.commit()
+
+    return await get_monthly_rent_summary(
+        mess_id=mess_id,
+        month=month,
+        current_user=current_user,
+        db=db,
+    )
+
+@router.post("/{mess_id}/monthly-rent/distribute-shortfall", response_model=MonthlyRentSummaryResponse)
+@router.post("/{mess_id}/monthly-rent/distribute-shortfall/", response_model=MonthlyRentSummaryResponse, include_in_schema=False)
+async def distribute_rent_shortfall(
+    mess_id: uuid.UUID,
+    payload: DistributeShortfallRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem_result = await db.execute(
+        select(Membership).where(Membership.mess_id == mess_id, Membership.user_id == current_user.id)
+    )
+    current_mem = mem_result.scalar_one_or_none()
+    if not current_mem or current_mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="শুধুমাত্র ম্যানেজার বা মেস ওনার খালি সিটের ঘাটতি বণ্টন করতে পারবেন",
+        )
+
+    month = payload.month
+
+    rent_stmt = select(MemberMonthlyRent).where(
+        MemberMonthlyRent.mess_id == mess_id,
+        MemberMonthlyRent.month == month,
+    )
+    existing_rents = (await db.execute(rent_stmt)).scalars().all()
+    if not existing_rents:
+        # Populate if not yet
+        await get_monthly_rent_summary(mess_id=mess_id, month=month, current_user=current_user, db=db)
+        existing_rents = (await db.execute(rent_stmt)).scalars().all()
+
+    # Get target house rent from FixedCost
+    fc_stmt = select(FixedCost).where(
+        FixedCost.mess_id == mess_id,
+        FixedCost.month == month,
+        FixedCost.category == FixedCostCategory.RENT,
+    )
+    fixed_costs = (await db.execute(fc_stmt)).scalars().all()
+    target_rent = sum(fc.amount for fc in fixed_costs)
+
+    # Sum of base seat rents
+    total_base = sum(r.base_seat_rent for r in existing_rents)
+    deficit = max(0.0, target_rent - total_base)
+
+    residents = [r for r in existing_rents if r.is_resident]
+    if not residents:
+        residents = existing_rents
+
+    if payload.mode == "equal":
+        share_per_resident = round(deficit / len(residents), 2) if len(residents) > 0 else 0.0
+        for r in existing_rents:
+            if r.is_resident:
+                r.vacancy_adjustment = share_per_resident
+                r.total_rent = round(r.base_seat_rent + share_per_resident, 2)
+                r.notes = "খালি সিটের সমবণ্টন সমন্বয়"
+            else:
+                r.vacancy_adjustment = 0.0
+                r.total_rent = r.base_seat_rent
+    elif payload.mode == "custom" and payload.adjustments:
+        for r in existing_rents:
+            uid_str = str(r.user_id)
+            if uid_str in payload.adjustments:
+                adj = float(payload.adjustments[uid_str])
+                r.vacancy_adjustment = adj
+                r.total_rent = round(r.base_seat_rent + adj, 2)
+                r.notes = "কাস্টম ঘাটতি সমন্বয়"
+
+    await db.commit()
+
+    return await get_monthly_rent_summary(mess_id=mess_id, month=month, current_user=current_user, db=db)
+
 
 @router.patch("/{mess_id}/members/{user_id}", response_model=MembershipResponse)
 @router.patch("/{mess_id}/members/{user_id}/", response_model=MembershipResponse, include_in_schema=False)

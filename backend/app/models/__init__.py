@@ -10,6 +10,7 @@ from app.models.closing import MonthlyClosing
 from app.models.platform import PlatformSetting, PlatformAnnouncement, SubscriptionPayment
 from app.models.menu import MealPoll, MealPollOption, MealPollVote, WeeklyMenuRoutine
 from app.models.maid_gas import MaidAttendance, GasLog
+from app.models.member_rent import MemberMonthlyRent
 
 __all__ = [
     "MemberRole",
@@ -34,5 +35,5 @@ __all__ = [
     "WeeklyMenuRoutine",
     "MaidAttendance",
     "GasLog",
-    "WhatsAppConfig",
+    "MemberMonthlyRent",
 ]
