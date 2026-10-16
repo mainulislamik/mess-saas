@@ -93,6 +93,17 @@ export default function MealsPage() {
     e.preventDefault();
     if (!currentMess?.id) return;
     const targetDate = selectedDay === "today" ? memberSummary?.today?.date : memberSummary?.tomorrow?.date;
+    const mealRules = memberSummary?.meal_rules || (currentMess as any)?.meal_rules || {};
+    const maxGuest = Number(mealRules.max_guest_per_meal ?? 4);
+
+    if (guestBFast > maxGuest || guestLunch > maxGuest || guestDinner > maxGuest) {
+      setMemberMsg({
+        type: "error",
+        text: `প্রতি বেলায় সর্বোচ্চ ${maxGuest} টি মেহমান মিল দেওয়া যাবে।`,
+      });
+      return;
+    }
+
     try {
       setSavingMemberMeal(true);
       setMemberMsg(null);
@@ -278,6 +289,10 @@ export default function MealsPage() {
     const lunchAllowed = slotStatus?.lunch?.allowed ?? true;
     const dinnerAllowed = slotStatus?.dinner?.allowed ?? true;
 
+    const mealRules = memberSummary?.meal_rules || (currentMess as any)?.meal_rules || {};
+    const allowGuest = mealRules.allow_guest_meals ?? true;
+    const maxGuest = Number(mealRules.max_guest_per_meal ?? 4);
+
     return (
       <main className="max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         {/* Header */}
@@ -431,7 +446,10 @@ export default function MealsPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 mt-2">
-                  <span className="text-xs text-slate-500 font-medium">মেহমান নাস্তা:</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-slate-600 font-medium">মেহমান নাস্তা:</span>
+                    <span className="text-[10px] text-slate-400">সর্বোচ্চ {maxGuest} টি</span>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     {guestBFast > 0 && (
                       <button
@@ -452,13 +470,13 @@ export default function MealsPage() {
                     </span>
                     <button
                       type="button"
-                      disabled={!bFastAllowed || guestBFast >= 10}
+                      disabled={!bFastAllowed || guestBFast >= maxGuest || !allowGuest}
                       onClick={() => {
                         setIsOff(false);
-                        setGuestBFast(guestBFast + 1);
+                        setGuestBFast(Math.min(maxGuest, guestBFast + 1));
                       }}
-                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
-                      title="১ জন মেহমান যোগ করুন"
+                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-2xs transition"
+                      title={guestBFast >= maxGuest ? `সর্বোচ্চ ${maxGuest} টি অনুমোদনযোগ্য` : "১ জন মেহমান যোগ করুন"}
                     >
                       +
                     </button>
@@ -521,7 +539,10 @@ export default function MealsPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 mt-2">
-                  <span className="text-xs text-slate-500 font-medium">মেহমান দুপুর:</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-slate-600 font-medium">মেহমান দুপুর:</span>
+                    <span className="text-[10px] text-slate-400">সর্বোচ্চ {maxGuest} টি</span>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     {guestLunch > 0 && (
                       <button
@@ -542,13 +563,13 @@ export default function MealsPage() {
                     </span>
                     <button
                       type="button"
-                      disabled={!lunchAllowed || guestLunch >= 10}
+                      disabled={!lunchAllowed || guestLunch >= maxGuest || !allowGuest}
                       onClick={() => {
                         setIsOff(false);
-                        setGuestLunch(guestLunch + 1);
+                        setGuestLunch(Math.min(maxGuest, guestLunch + 1));
                       }}
-                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
-                      title="১ জন মেহমান যোগ করুন"
+                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-2xs transition"
+                      title={guestLunch >= maxGuest ? `সর্বোচ্চ ${maxGuest} টি অনুমোদনযোগ্য` : "১ জন মেহমান যোগ করুন"}
                     >
                       +
                     </button>
@@ -611,7 +632,10 @@ export default function MealsPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 mt-2">
-                  <span className="text-xs text-slate-500 font-medium">মেহমান রাত:</span>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-slate-600 font-medium">মেহমান রাত:</span>
+                    <span className="text-[10px] text-slate-400">সর্বোচ্চ {maxGuest} টি</span>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     {guestDinner > 0 && (
                       <button
@@ -632,13 +656,13 @@ export default function MealsPage() {
                     </span>
                     <button
                       type="button"
-                      disabled={!dinnerAllowed || guestDinner >= 10}
+                      disabled={!dinnerAllowed || guestDinner >= maxGuest || !allowGuest}
                       onClick={() => {
                         setIsOff(false);
-                        setGuestDinner(guestDinner + 1);
+                        setGuestDinner(Math.min(maxGuest, guestDinner + 1));
                       }}
-                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
-                      title="১ জন মেহমান যোগ করুন"
+                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-2xs transition"
+                      title={guestDinner >= maxGuest ? `সর্বোচ্চ ${maxGuest} টি অনুমোদনযোগ্য` : "১ জন মেহমান যোগ করুন"}
                     >
                       +
                     </button>

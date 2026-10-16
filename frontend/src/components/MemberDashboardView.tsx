@@ -92,6 +92,13 @@ export default function MemberDashboardView() {
     e.preventDefault();
     if (!currentMess?.id) return;
     const targetDate = selectedDay === "today" ? summary?.today?.date : summary?.tomorrow?.date;
+    const maxGuest = Number(summary?.meal_rules?.max_guest_per_meal ?? (currentMess as any)?.meal_rules?.max_guest_per_meal ?? 4);
+
+    if (guestBreakfast > maxGuest || guestLunch > maxGuest || guestDinner > maxGuest) {
+      alert(`প্রতি বেলায় সর্বোচ্চ ${maxGuest} টি মেহমান মিল দেওয়া যাবে।`);
+      return;
+    }
+
     try {
       setSavingMeal(true);
       setMealSuccess(false);
@@ -323,7 +330,7 @@ export default function MemberDashboardView() {
                 const isOpen = bStatus ? bStatus.is_open : true;
                 const bUnit = summary?.meal_rules?.breakfast_unit ?? 0.5;
                 const allowGuest = summary?.meal_rules?.allow_guest_meals ?? true;
-                const maxGuest = summary?.meal_rules?.max_guest_per_meal ?? 3;
+                const maxGuest = Number(summary?.meal_rules?.max_guest_per_meal ?? (currentMess as any)?.meal_rules?.max_guest_per_meal ?? 4);
 
                 return (
                   <div className={`p-4 rounded-2xl border transition ${
@@ -407,7 +414,7 @@ export default function MemberDashboardView() {
                 const lStatus = currentSlot?.lunch_status;
                 const isOpen = lStatus ? lStatus.is_open : true;
                 const allowGuest = summary?.meal_rules?.allow_guest_meals ?? true;
-                const maxGuest = summary?.meal_rules?.max_guest_per_meal ?? 3;
+                const maxGuest = Number(summary?.meal_rules?.max_guest_per_meal ?? (currentMess as any)?.meal_rules?.max_guest_per_meal ?? 4);
 
                 return (
                   <div className={`p-4 rounded-2xl border transition ${
@@ -491,7 +498,7 @@ export default function MemberDashboardView() {
                 const dStatus = currentSlot?.dinner_status;
                 const isOpen = dStatus ? dStatus.is_open : true;
                 const allowGuest = summary?.meal_rules?.allow_guest_meals ?? true;
-                const maxGuest = summary?.meal_rules?.max_guest_per_meal ?? 3;
+                const maxGuest = Number(summary?.meal_rules?.max_guest_per_meal ?? (currentMess as any)?.meal_rules?.max_guest_per_meal ?? 4);
 
                 return (
                   <div className={`p-4 rounded-2xl border transition ${
