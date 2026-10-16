@@ -431,20 +431,38 @@ export default function MealsPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 mt-2">
-                  <span className="text-xs text-slate-500">মেহমান নাস্তা:</span>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="5"
-                    disabled={!bFastAllowed}
-                    value={guestBFast}
-                    onChange={(e) => {
-                      setIsOff(false);
-                      setGuestBFast(parseFloat(e.target.value) || 0);
-                    }}
-                    className="w-16 text-center py-1 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 bg-white"
-                  />
+                  <span className="text-xs text-slate-500 font-medium">মেহমান নাস্তা:</span>
+                  <div className="flex items-center gap-1.5">
+                    {guestBFast > 0 && (
+                      <button
+                        type="button"
+                        disabled={!bFastAllowed}
+                        onClick={() => {
+                          setIsOff(false);
+                          setGuestBFast(Math.max(0, guestBFast - 1));
+                        }}
+                        className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 font-bold text-sm flex items-center justify-center hover:bg-rose-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
+                        title="১ জন মেহমান কমান"
+                      >
+                        -
+                      </button>
+                    )}
+                    <span className="min-w-6 px-1 text-center text-xs font-extrabold text-slate-800 font-mono">
+                      {guestBFast}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!bFastAllowed || guestBFast >= 10}
+                      onClick={() => {
+                        setIsOff(false);
+                        setGuestBFast(guestBFast + 1);
+                      }}
+                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
+                      title="১ জন মেহমান যোগ করুন"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
 
                 {!bFastAllowed && slotStatus?.breakfast?.reason && (
@@ -503,20 +521,38 @@ export default function MealsPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 mt-2">
-                  <span className="text-xs text-slate-500">মেহমান দুপুর:</span>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    max="5"
-                    disabled={!lunchAllowed}
-                    value={guestLunch}
-                    onChange={(e) => {
-                      setIsOff(false);
-                      setGuestLunch(parseFloat(e.target.value) || 0);
-                    }}
-                    className="w-16 text-center py-1 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 bg-white"
-                  />
+                  <span className="text-xs text-slate-500 font-medium">মেহমান দুপুর:</span>
+                  <div className="flex items-center gap-1.5">
+                    {guestLunch > 0 && (
+                      <button
+                        type="button"
+                        disabled={!lunchAllowed}
+                        onClick={() => {
+                          setIsOff(false);
+                          setGuestLunch(Math.max(0, guestLunch - 1));
+                        }}
+                        className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 font-bold text-sm flex items-center justify-center hover:bg-rose-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
+                        title="১ জন মেহমান কমান"
+                      >
+                        -
+                      </button>
+                    )}
+                    <span className="min-w-6 px-1 text-center text-xs font-extrabold text-slate-800 font-mono">
+                      {guestLunch}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!lunchAllowed || guestLunch >= 10}
+                      onClick={() => {
+                        setIsOff(false);
+                        setGuestLunch(guestLunch + 1);
+                      }}
+                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
+                      title="১ জন মেহমান যোগ করুন"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
 
                 {!lunchAllowed && slotStatus?.lunch?.reason && (
@@ -575,20 +611,38 @@ export default function MealsPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 mt-2">
-                  <span className="text-xs text-slate-500">মেহমান রাত:</span>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    max="5"
-                    disabled={!dinnerAllowed}
-                    value={guestDinner}
-                    onChange={(e) => {
-                      setIsOff(false);
-                      setGuestDinner(parseFloat(e.target.value) || 0);
-                    }}
-                    className="w-16 text-center py-1 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 bg-white"
-                  />
+                  <span className="text-xs text-slate-500 font-medium">মেহমান রাত:</span>
+                  <div className="flex items-center gap-1.5">
+                    {guestDinner > 0 && (
+                      <button
+                        type="button"
+                        disabled={!dinnerAllowed}
+                        onClick={() => {
+                          setIsOff(false);
+                          setGuestDinner(Math.max(0, guestDinner - 1));
+                        }}
+                        className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 font-bold text-sm flex items-center justify-center hover:bg-rose-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
+                        title="১ জন মেহমান কমান"
+                      >
+                        -
+                      </button>
+                    )}
+                    <span className="min-w-6 px-1 text-center text-xs font-extrabold text-slate-800 font-mono">
+                      {guestDinner}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!dinnerAllowed || guestDinner >= 10}
+                      onClick={() => {
+                        setIsOff(false);
+                        setGuestDinner(guestDinner + 1);
+                      }}
+                      className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center hover:bg-emerald-100 disabled:opacity-40 cursor-pointer shadow-2xs transition"
+                      title="১ জন মেহমান যোগ করুন"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
 
                 {!dinnerAllowed && slotStatus?.dinner?.reason && (
