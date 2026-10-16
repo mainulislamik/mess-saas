@@ -51,7 +51,7 @@ export default function MealsPage() {
   const [guestBFast, setGuestBFast] = useState(0.0);
   const [guestLunch, setGuestLunch] = useState(0.0);
   const [guestDinner, setGuestDinner] = useState(0.0);
-  const [isOff, setIsOff] = useState(true);
+  const [isOff, setIsOff] = useState(false);
 
   const [savingMemberMeal, setSavingMemberMeal] = useState(false);
   const [memberMsg, setMemberMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -85,7 +85,7 @@ export default function MealsPage() {
       setGuestBFast(dayData.guest_breakfast ?? 0.0);
       setGuestLunch(dayData.guest_lunch ?? 0.0);
       setGuestDinner(dayData.guest_dinner ?? 0.0);
-      setIsOff(dayData.is_off ?? (dayData.total_meals === 0));
+      setIsOff(dayData.is_off ?? false);
     }
   }, [selectedDay, memberSummary]);
 
@@ -96,23 +96,21 @@ export default function MealsPage() {
     try {
       setSavingMemberMeal(true);
       setMemberMsg(null);
+      const totalCount = bFast + lunch + dinner + guestBFast + guestLunch + guestDinner;
       await api.post(`/messes/${currentMess.id}/meals/me`, {
         date: targetDate,
-        breakfast: isOff ? 0 : bFast,
-        lunch: isOff ? 0 : lunch,
-        dinner: isOff ? 0 : dinner,
-        guest_breakfast: isOff ? 0 : guestBFast,
-        guest_lunch: isOff ? 0 : guestLunch,
-        guest_dinner: isOff ? 0 : guestDinner,
-        is_off: isOff,
+        breakfast: bFast,
+        lunch: lunch,
+        dinner: dinner,
+        guest_breakfast: guestBFast,
+        guest_lunch: guestLunch,
+        guest_dinner: guestDinner,
+        is_off: isOff || totalCount === 0,
       });
       setMemberMsg({ type: "success", text: `${selectedDay === "today" ? "আজকের" : "আগামীকালের"} মিল সফলভাবে আপডেট করা হয়েছে!` });
-      await fetchMemberSummary();
+      fetchMemberSummary();
     } catch (err: any) {
-      setMemberMsg({
-        type: "error",
-        text: err.response?.data?.detail || "মিল আপডেট করতে সমস্যা হয়েছে। কাট-অফ সময় যাচাই করুন।",
-      });
+      setMemberMsg({ type: "error", text: err.response?.data?.detail || "মিল আপডেট করতে ব্যর্থ হয়েছে" });
     } finally {
       setSavingMemberMeal(false);
     }
@@ -342,25 +340,44 @@ export default function MealsPage() {
 
         {/* Meal Edit Form */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
                 {selectedDay === "today" ? "আজকের" : "আগামীকালের"} মিল নির্বাচন
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                কাট-অফ সময় পার হয়ে গেলে মিল বন্ধ বা পরিবর্তন করা যাবে না
+                যেসব বেলার খাবার খাবেন শুধু সেগুলো চালু রাখুন। কোনো বেলা না খেলে ০.০ (বন্ধ) রাখুন।
               </p>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer bg-slate-50 hover:bg-slate-100 px-3.5 py-2 rounded-xl border border-slate-200 transition">
-              <input
-                type="checkbox"
-                checked={isOff}
-                onChange={(e) => setIsOff(e.target.checked)}
-                className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
-              />
-              <span className="text-xs font-bold text-slate-700">এই দিনের সব মিল বন্ধ (OFF)</span>
-            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (bFast > 0 || lunch > 0 || dinner > 0) {
+                    // Turn all off
+                    if (bFastAllowed) setBFast(0);
+                    if (lunchAllowed) setLunch(0);
+                    if (dinnerAllowed) setDinner(0);
+                    setIsOff(true);
+                  } else {
+                    // Quick enable normal full-day (Lunch 1 + Dinner 1)
+                    if (lunchAllowed) setLunch(1.0);
+                    if (dinnerAllowed) setDinner(1.0);
+                    setIsOff(false);
+                  }
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                  bFast > 0 || lunch > 0 || dinner > 0
+                    ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                }`}
+              >
+                {bFast > 0 || lunch > 0 || dinner > 0
+                  ? "❌ সব মিল বন্ধ করুন (সব ০.০)"
+                  : "⚡ সাধারণ মিল চালু (দুপুর ১ + রাত ১)"}
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleSaveMemberMeal} className="p-6 space-y-6">
@@ -398,15 +415,18 @@ export default function MealsPage() {
                   <span className="text-xs text-slate-600 font-semibold">আমার নাস্তা (০.৫ মিল):</span>
                   <button
                     type="button"
-                    disabled={isOff || !bFastAllowed}
-                    onClick={() => setBFast(bFast > 0 ? 0 : 0.5)}
+                    disabled={!bFastAllowed}
+                    onClick={() => {
+                      setIsOff(false);
+                      setBFast(bFast > 0 ? 0 : 0.5);
+                    }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-40 ${
-                      bFast > 0
+                      bFast > 0 && !isOff
                         ? "bg-emerald-600 text-white"
                         : "bg-slate-200 text-slate-600 hover:bg-slate-300"
                     }`}
                   >
-                    {bFast > 0 ? "চালু আছে (০.৫)" : "বন্ধ (০.০)"}
+                    {bFast > 0 && !isOff ? "চালু আছে (০.৫)" : "বন্ধ (০.০)"}
                   </button>
                 </div>
 
@@ -417,9 +437,12 @@ export default function MealsPage() {
                     step="0.5"
                     min="0"
                     max="5"
-                    disabled={isOff || !bFastAllowed}
+                    disabled={!bFastAllowed}
                     value={guestBFast}
-                    onChange={(e) => setGuestBFast(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      setIsOff(false);
+                      setGuestBFast(parseFloat(e.target.value) || 0);
+                    }}
                     className="w-16 text-center py-1 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 bg-white"
                   />
                 </div>
@@ -464,15 +487,18 @@ export default function MealsPage() {
                   <span className="text-xs text-slate-600 font-semibold">আমার দুপুরের মিল:</span>
                   <button
                     type="button"
-                    disabled={isOff || !lunchAllowed}
-                    onClick={() => setLunch(lunch > 0 ? 0 : 1.0)}
+                    disabled={!lunchAllowed}
+                    onClick={() => {
+                      setIsOff(false);
+                      setLunch(lunch > 0 ? 0 : 1.0);
+                    }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-40 ${
-                      lunch > 0
+                      lunch > 0 && !isOff
                         ? "bg-emerald-600 text-white"
                         : "bg-slate-200 text-slate-600 hover:bg-slate-300"
                     }`}
                   >
-                    {lunch > 0 ? "চালু আছে (১.০)" : "বন্ধ (০.০)"}
+                    {lunch > 0 && !isOff ? "চালু আছে (১.০)" : "বন্ধ (০.০)"}
                   </button>
                 </div>
 
@@ -483,9 +509,12 @@ export default function MealsPage() {
                     step="1"
                     min="0"
                     max="5"
-                    disabled={isOff || !lunchAllowed}
+                    disabled={!lunchAllowed}
                     value={guestLunch}
-                    onChange={(e) => setGuestLunch(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      setIsOff(false);
+                      setGuestLunch(parseFloat(e.target.value) || 0);
+                    }}
                     className="w-16 text-center py-1 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 bg-white"
                   />
                 </div>
@@ -530,15 +559,18 @@ export default function MealsPage() {
                   <span className="text-xs text-slate-600 font-semibold">আমার রাতের মিল:</span>
                   <button
                     type="button"
-                    disabled={isOff || !dinnerAllowed}
-                    onClick={() => setDinner(dinner > 0 ? 0 : 1.0)}
+                    disabled={!dinnerAllowed}
+                    onClick={() => {
+                      setIsOff(false);
+                      setDinner(dinner > 0 ? 0 : 1.0);
+                    }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-40 ${
-                      dinner > 0
+                      dinner > 0 && !isOff
                         ? "bg-emerald-600 text-white"
                         : "bg-slate-200 text-slate-600 hover:bg-slate-300"
                     }`}
                   >
-                    {dinner > 0 ? "চালু আছে (১.০)" : "বন্ধ (০.০)"}
+                    {dinner > 0 && !isOff ? "চালু আছে (১.০)" : "বন্ধ (০.০)"}
                   </button>
                 </div>
 
@@ -549,9 +581,12 @@ export default function MealsPage() {
                     step="1"
                     min="0"
                     max="5"
-                    disabled={isOff || !dinnerAllowed}
+                    disabled={!dinnerAllowed}
                     value={guestDinner}
-                    onChange={(e) => setGuestDinner(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      setIsOff(false);
+                      setGuestDinner(parseFloat(e.target.value) || 0);
+                    }}
                     className="w-16 text-center py-1 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-40 bg-white"
                   />
                 </div>
@@ -568,6 +603,15 @@ export default function MealsPage() {
               <div className="text-xs text-slate-500 flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-slate-400" />
                 <span>কাট-অফ সময়ের পরে পরিবর্তনের জন্য মেস ম্যানেজারের সাথে সরাসরি যোগাযোগ করুন।</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">
+                  {selectedDay === "today" ? "আজকের" : "আগামীকালের"} মোট নির্বাচিত মিল:{" "}
+                  <span className="text-emerald-700 font-extrabold text-sm font-mono">
+                    {(bFast + lunch + dinner + guestBFast + guestLunch + guestDinner).toFixed(1)} টি
+                  </span>
+                </span>
               </div>
 
               <button

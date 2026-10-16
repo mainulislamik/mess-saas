@@ -44,7 +44,7 @@ export default function MemberDashboardView() {
   const [guestBreakfast, setGuestBreakfast] = useState(0.0);
   const [guestLunch, setGuestLunch] = useState(0.0);
   const [guestDinner, setGuestDinner] = useState(0.0);
-  const [isOff, setIsOff] = useState(true);
+  const [isOff, setIsOff] = useState(false);
   const [savingMeal, setSavingMeal] = useState(false);
   const [mealSuccess, setMealSuccess] = useState(false);
 
@@ -84,7 +84,7 @@ export default function MemberDashboardView() {
       setGuestBreakfast(dayData.guest_breakfast ?? 0.0);
       setGuestLunch(dayData.guest_lunch ?? 0.0);
       setGuestDinner(dayData.guest_dinner ?? 0.0);
-      setIsOff(dayData.is_off ?? (dayData.total_meals === 0));
+      setIsOff(dayData.is_off ?? false);
     }
   }, [selectedDay, summary]);
 

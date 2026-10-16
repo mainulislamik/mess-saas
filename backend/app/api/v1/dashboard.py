@@ -270,7 +270,7 @@ async def get_member_personal_summary(
         guest_breakfast=my_today_obj.guest_breakfast if my_today_obj else 0.0,
         guest_lunch=my_today_obj.guest_lunch if my_today_obj else 0.0,
         guest_dinner=my_today_obj.guest_dinner if my_today_obj else 0.0,
-        is_off=my_today_obj.is_off if my_today_obj else True,
+        is_off=my_today_obj.is_off if my_today_obj else False,
         total_meals=my_today_obj.total_meals if my_today_obj else 0.0,
         breakfast_status=SlotStatus(
             is_open=today_b_open,
@@ -314,7 +314,7 @@ async def get_member_personal_summary(
         guest_breakfast=my_tomorrow_obj.guest_breakfast if my_tomorrow_obj else 0.0,
         guest_lunch=my_tomorrow_obj.guest_lunch if my_tomorrow_obj else 0.0,
         guest_dinner=my_tomorrow_obj.guest_dinner if my_tomorrow_obj else 0.0,
-        is_off=my_tomorrow_obj.is_off if my_tomorrow_obj else True,
+        is_off=my_tomorrow_obj.is_off if my_tomorrow_obj else False,
         total_meals=my_tomorrow_obj.total_meals if my_tomorrow_obj else 0.0,
         breakfast_status=SlotStatus(
             is_open=tomorrow_b_open,
