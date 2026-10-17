@@ -77,7 +77,7 @@ async def get_daily_meals(
                 )
             )
         else:
-            # Default meal entry if not yet recorded (0 meals, OFF until explicitly set)
+            # Default meal entry if not yet recorded (0 meals, normal unchecked state)
             results.append(
                 MealResponse(
                     id=uuid.uuid4(),
@@ -87,7 +87,10 @@ async def get_daily_meals(
                     breakfast=0.0,
                     lunch=0.0,
                     dinner=0.0,
-                    is_off=True,
+                    guest_breakfast=0.0,
+                    guest_lunch=0.0,
+                    guest_dinner=0.0,
+                    is_off=False,
                     notes=None,
                     total_meals=0.0,
                     user_name=user.name if user else "Member",
@@ -419,9 +422,9 @@ async def update_my_meal(
     if not is_manager:
         old_b = existing.breakfast if existing else 0.0
         old_gb = existing.guest_breakfast if existing else 0.0
-        old_l = existing.lunch if existing else 1.0
+        old_l = existing.lunch if existing else 0.0
         old_gl = existing.guest_lunch if existing else 0.0
-        old_d = existing.dinner if existing else 1.0
+        old_d = existing.dinner if existing else 0.0
         old_gd = existing.guest_dinner if existing else 0.0
 
         b_cutoff_str = meal_rules.get("breakfast_cutoff_time", "22:00")
