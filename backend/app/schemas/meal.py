@@ -7,14 +7,22 @@ class MealItemBase(BaseModel):
     breakfast: float = Field(default=0.0, ge=0.0, le=5.0)
     lunch: float = Field(default=1.0, ge=0.0, le=5.0)
     dinner: float = Field(default=1.0, ge=0.0, le=5.0)
-    guest_breakfast: float = Field(default=0.0, ge=0.0, le=20.0)
-    guest_lunch: float = Field(default=0.0, ge=0.0, le=20.0)
-    guest_dinner: float = Field(default=0.0, ge=0.0, le=20.0)
+    guest_breakfast: float = Field(default=0.0, ge=0.0, le=4.0)
+    guest_lunch: float = Field(default=0.0, ge=0.0, le=4.0)
+    guest_dinner: float = Field(default=0.0, ge=0.0, le=4.0)
     is_off: bool = False
     notes: Optional[str] = None
 
-class MealUserItem(MealItemBase):
+class MealUserItem(BaseModel):
     user_id: uuid.UUID
+    breakfast: float = Field(default=0.0, ge=0.0, le=5.0)
+    lunch: float = Field(default=1.0, ge=0.0, le=5.0)
+    dinner: float = Field(default=1.0, ge=0.0, le=5.0)
+    guest_breakfast: Optional[float] = Field(default=None, ge=0.0, le=4.0)
+    guest_lunch: Optional[float] = Field(default=None, ge=0.0, le=4.0)
+    guest_dinner: Optional[float] = Field(default=None, ge=0.0, le=4.0)
+    is_off: bool = False
+    notes: Optional[str] = None
 
 class MealBatchUpdate(BaseModel):
     date: date_type

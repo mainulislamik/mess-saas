@@ -14,6 +14,7 @@ from app.models.membership import Membership
 from app.models.meal import Meal
 from app.models.enums import MemberRole
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
+from app.api.v1.closings import check_month_not_closed
 from app.schemas.meal import (
     MealBatchUpdate,
     MealSelfUpdate,
@@ -184,6 +185,8 @@ async def batch_update_meals(
             detail="Only Owner or Manager can batch update meals",
         )
 
+    await check_month_not_closed(db, mess_id, data.date)
+
     for item in data.meals:
         # Check if meal exists for user and date
         stmt = select(Meal).where(
@@ -196,9 +199,12 @@ async def batch_update_meals(
             existing.breakfast = item.breakfast
             existing.lunch = item.lunch
             existing.dinner = item.dinner
-            existing.guest_breakfast = item.guest_breakfast
-            existing.guest_lunch = item.guest_lunch
-            existing.guest_dinner = item.guest_dinner
+            if item.guest_breakfast is not None:
+                existing.guest_breakfast = item.guest_breakfast
+            if item.guest_lunch is not None:
+                existing.guest_lunch = item.guest_lunch
+            if item.guest_dinner is not None:
+                existing.guest_dinner = item.guest_dinner
             existing.is_off = item.is_off
             existing.notes = item.notes
         else:
@@ -209,9 +215,9 @@ async def batch_update_meals(
                 breakfast=item.breakfast,
                 lunch=item.lunch,
                 dinner=item.dinner,
-                guest_breakfast=item.guest_breakfast,
-                guest_lunch=item.guest_lunch,
-                guest_dinner=item.guest_dinner,
+                guest_breakfast=item.guest_breakfast if item.guest_breakfast is not None else 0.0,
+                guest_lunch=item.guest_lunch if item.guest_lunch is not None else 0.0,
+                guest_dinner=item.guest_dinner if item.guest_dinner is not None else 0.0,
                 is_off=item.is_off,
                 notes=item.notes,
             )
@@ -233,6 +239,8 @@ async def emergency_slot_void(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only Manager or Owner can perform emergency meal slot cancellation",
         )
+
+    await check_month_not_closed(db, mess_id, payload.date)
 
     REASON_MAP = {
         "bua_absent": "খালা/বুয়া আসেনি",
@@ -352,6 +360,8 @@ async def update_my_meal(
     db: AsyncSession = Depends(get_db),
 ):
     mem = await get_membership_for_mess(mess_id, current_user, db)
+
+    await check_month_not_closed(db, mess_id, data.date)
 
     # Fetch Mess for rules
     mess = (await db.execute(select(Mess).where(Mess.id == mess_id))).scalar_one_or_none()

@@ -1,6 +1,6 @@
 import uuid
-from datetime import date as date_type, datetime
-from typing import List, Optional
+from datetime import date as date_type, datetime, timedelta
+from typing import List, Optional, Union
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -26,6 +26,31 @@ from app.schemas.closing import (
 
 router = APIRouter(prefix="/messes/{mess_id}/closings", tags=["Closings"])
 
+async def check_month_not_closed(
+    db: AsyncSession,
+    mess_id: uuid.UUID,
+    target_date_or_month: Union[date_type, datetime, str],
+) -> None:
+    """
+    Prevents modifying transactions, meals, bazars, or costs if the month has been finalized/locked.
+    """
+    if isinstance(target_date_or_month, (date_type, datetime)):
+        month_str = target_date_or_month.strftime("%Y-%m")
+    else:
+        month_str = str(target_date_or_month)[:7]
+
+    stmt = select(MonthlyClosing).where(
+        MonthlyClosing.mess_id == mess_id,
+        MonthlyClosing.month == month_str,
+        MonthlyClosing.is_closed == True,
+    )
+    closing = (await db.execute(stmt)).scalars().first()
+    if closing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{month_str} মাসের হিসাব ক্লোজ (লক) করা হয়েছে। ক্লোজড মাসে কোনো পরিবর্তন বা এন্ট্রি করা যাবে না।",
+        )
+
 async def calculate_monthly_closing_data(
     mess_id: uuid.UUID,
     month: str,
@@ -38,19 +63,7 @@ async def calculate_monthly_closing_data(
     else:
         end_date = date_type(year, m_num + 1, 1)
 
-    # 1. Active memberships
-    mem_stmt = (
-        select(Membership)
-        .options(selectinload(Membership.user))
-        .where(Membership.mess_id == mess_id)
-        .order_by(Membership.joined_at.asc())
-    )
-    memberships = (await db.execute(mem_stmt)).scalars().all()
-    member_count = len(memberships)
-    if member_count == 0:
-        raise HTTPException(status_code=400, detail="মেসে কোনো সক্রিয় মেম্বার নেই")
-
-    # 2. Total Bazar (only approved bazars)
+    # 1. Total Bazar (only approved bazars)
     bazar_stmt = select(func.coalesce(func.sum(Bazar.amount), 0.0)).where(
         Bazar.mess_id == mess_id,
         Bazar.date >= start_date,
@@ -59,7 +72,7 @@ async def calculate_monthly_closing_data(
     )
     total_bazar = float((await db.execute(bazar_stmt)).scalar() or 0.0)
 
-    # 3. Meals per member
+    # 2. Meals per member
     meal_stmt = select(Meal).where(
         Meal.mess_id == mess_id,
         Meal.date >= start_date,
@@ -74,6 +87,44 @@ async def calculate_monthly_closing_data(
             t = m.total_meals
             user_meals[m.user_id] = user_meals.get(m.user_id, 0.0) + t
             total_meals += t
+
+    # 3. Active memberships during this month or with activity
+    month_start_dt = datetime.combine(start_date, datetime.min.time())
+    month_end_dt = datetime.combine(end_date - timedelta(days=1), datetime.max.time())
+
+    mem_stmt = (
+        select(Membership)
+        .options(selectinload(Membership.user))
+        .where(
+            Membership.mess_id == mess_id,
+            Membership.joined_at <= month_end_dt,
+            (Membership.left_at.is_(None) | (Membership.left_at >= month_start_dt)),
+        )
+        .order_by(Membership.joined_at.asc())
+    )
+    memberships = list((await db.execute(mem_stmt)).scalars().all())
+
+    # Ensure members who had meals in this month are included
+    active_user_ids = {m.user_id for m in memberships}
+    extra_user_ids = {m.user_id for m in meals if m.user_id not in active_user_ids}
+    if extra_user_ids:
+        stmt_extra = (
+            select(Membership)
+            .options(selectinload(Membership.user))
+            .where(
+                Membership.mess_id == mess_id,
+                Membership.user_id.in_(extra_user_ids),
+            )
+        )
+        extra_mems = (await db.execute(stmt_extra)).scalars().all()
+        for em in extra_mems:
+            if em.user_id not in active_user_ids:
+                memberships.append(em)
+                active_user_ids.add(em.user_id)
+
+    member_count = len(memberships)
+    if member_count == 0:
+        raise HTTPException(status_code=400, detail="মেসে কোনো সক্রিয় মেম্বার নেই")
 
     # 4. Meal Rate formula: Total Bazar / Total Meals
     if total_meals > 0:
@@ -117,11 +168,12 @@ async def calculate_monthly_closing_data(
     total_fixed_cost = round(total_house_rent + total_shared_utilities, 2)
     fixed_per_member = round(total_fixed_cost / member_count, 2) if member_count > 0 else 0.0
 
-    # 6. Deposits per member
+    # 6. Deposits per member (verified only)
     dep_stmt = select(Deposit).where(
         Deposit.mess_id == mess_id,
         Deposit.date >= start_date,
         Deposit.date < end_date,
+        Deposit.is_verified == True,
     )
     deposits = (await db.execute(dep_stmt)).scalars().all()
     user_deposits: dict[uuid.UUID, float] = {}
@@ -286,6 +338,7 @@ async def finalize_closing(
         existing.member_count = preview.member_count
         existing.fixed_cost_per_member = preview.fixed_cost_per_member
         existing.summary_data = summary_dict
+        existing.is_closed = True
         existing.closed_by = current_user.id
         existing.closed_at = datetime.utcnow()
         closing = existing
@@ -309,3 +362,29 @@ async def finalize_closing(
     await db.commit()
     await db.refresh(closing)
     return closing
+
+@router.post("/{month}/reopen", response_model=MonthlyClosingResponse)
+async def reopen_closing(
+    mess_id: uuid.UUID,
+    month: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    mem = await get_membership_for_mess(mess_id, current_user, db)
+    if mem.role not in [MemberRole.OWNER, MemberRole.MANAGER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Owner or Manager can reopen monthly closing",
+        )
+    stmt = select(MonthlyClosing).where(
+        MonthlyClosing.mess_id == mess_id,
+        MonthlyClosing.month == month,
+    )
+    closing = (await db.execute(stmt)).scalar_one_or_none()
+    if not closing:
+        raise HTTPException(status_code=404, detail="এই মাসের কোনো ক্লোজিং ডাটা পাওয়া যায়নি")
+    closing.is_closed = False
+    await db.commit()
+    await db.refresh(closing)
+    return closing
+

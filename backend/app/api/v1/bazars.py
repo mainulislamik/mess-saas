@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.bazar import Bazar
 from app.models.enums import MemberRole, BazarStatus
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
+from app.api.v1.closings import check_month_not_closed
 from app.schemas.bazar import (
     BazarCreate,
     BazarResponse,
@@ -97,6 +98,9 @@ async def create_bazar(
     db: AsyncSession = Depends(get_db),
 ):
     mem = await get_membership_for_mess(mess_id, current_user, db)
+
+    await check_month_not_closed(db, mess_id, bazar_in.date)
+
     # If regular member, strictly enforce user_id is current_user.id
     target_user_id = bazar_in.user_id
     if mem.role == MemberRole.MEMBER:
@@ -172,6 +176,8 @@ async def review_bazar(
     if not bazar:
         raise HTTPException(status_code=404, detail="Bazar record not found")
 
+    await check_month_not_closed(db, mess_id, bazar.date)
+
     if review_in.action == "approve":
         bazar.status = BazarStatus.APPROVED
         bazar.approved_by = current_user.id
@@ -217,8 +223,16 @@ async def delete_bazar(
     if not bazar:
         raise HTTPException(status_code=404, detail="Bazar record not found")
 
-    if mem.role == MemberRole.MEMBER and bazar.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this bazar entry")
+    await check_month_not_closed(db, mess_id, bazar.date)
+
+    if mem.role == MemberRole.MEMBER:
+        if bazar.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this bazar entry")
+        if bazar.status == BazarStatus.APPROVED:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="অনুমোদিত বাজার এন্ট্রি সাধারণ মেম্বার ডিলিট করতে পারবেন না। ম্যানেজারের সাথে যোগাযোগ করুন।",
+            )
 
     await db.delete(bazar)
     await db.commit()

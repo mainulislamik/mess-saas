@@ -86,20 +86,22 @@ async def get_dashboard(
     else:
         estimated_meal_rate = 0.0
 
-    # Month Deposits
+    # Month Deposits (verified only)
     dep_stmt = select(func.coalesce(func.sum(Deposit.amount), 0.0)).where(
         Deposit.mess_id == mess_id,
         Deposit.date >= start_date,
         Deposit.date < end_date,
+        Deposit.is_verified == True,
     )
     month_total_deposit = float((await db.execute(dep_stmt)).scalar() or 0.0)
 
-    # My Deposits
+    # My Deposits (verified only)
     my_dep_stmt = select(func.coalesce(func.sum(Deposit.amount), 0.0)).where(
         Deposit.mess_id == mess_id,
         Deposit.user_id == current_user.id,
         Deposit.date >= start_date,
         Deposit.date < end_date,
+        Deposit.is_verified == True,
     )
     my_total_deposit = float((await db.execute(my_dep_stmt)).scalar() or 0.0)
 

@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.deposit import Deposit
 from app.models.enums import MemberRole
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
+from app.api.v1.closings import check_month_not_closed
 from app.schemas.deposit import DepositCreate, DepositResponse, DepositMonthlySummary
 
 router = APIRouter(prefix="/messes/{mess_id}/deposits", tags=["Deposits"])
@@ -63,7 +64,7 @@ async def list_deposits(
         for d in deposits
     ]
 
-    total = sum(d.amount for d in items)
+    total = sum(d.amount for d in items if d.is_verified)
     return DepositMonthlySummary(
         month=month,
         total_deposit=round(total, 2),
@@ -79,6 +80,9 @@ async def create_deposit(
     db: AsyncSession = Depends(get_db),
 ):
     mem = await get_membership_for_mess(mess_id, current_user, db)
+
+    await check_month_not_closed(db, mess_id, deposit_in.date)
+
     # Manager or Owner can add deposit for any member; normal member can only submit their own deposit proof
     if mem.role == MemberRole.MEMBER and deposit_in.user_id != current_user.id:
         raise HTTPException(
@@ -133,6 +137,8 @@ async def delete_deposit(
     if not deposit:
         raise HTTPException(status_code=404, detail="Deposit record not found")
 
+    await check_month_not_closed(db, mess_id, deposit.date)
+
     await db.delete(deposit)
     await db.commit()
 
@@ -151,6 +157,8 @@ async def verify_deposit(
     deposit = (await db.execute(stmt)).scalar_one_or_none()
     if not deposit:
         raise HTTPException(status_code=404, detail="ডিপোজিট রেকর্ড পাওয়া যায়নি")
+
+    await check_month_not_closed(db, mess_id, deposit.date)
 
     deposit.is_verified = True
     await db.commit()

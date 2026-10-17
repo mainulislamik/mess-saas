@@ -11,6 +11,7 @@ from app.models.fixed_cost import FixedCost
 from app.models.membership import Membership
 from app.models.enums import MemberRole, FixedCostCategory
 from app.core.deps import get_current_user, get_membership_for_mess, get_safe_month
+from app.api.v1.closings import check_month_not_closed
 from app.schemas.fixed_cost import (
     FixedCostCreate,
     FixedCostUpdate,
@@ -109,7 +110,33 @@ async def create_fixed_cost(
             detail="Only Owner or Manager can manage fixed costs and utilities",
         )
 
+    await check_month_not_closed(db, mess_id, cost_in.month)
+
     effective_date = cost_in.cost_date or cost_in.billing_date
+    if effective_date and effective_date.strftime("%Y-%m") != cost_in.month:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"খরচের তারিখ ({effective_date}) এবং নির্বাচিত মাস ({cost_in.month}) একই হওয়া আবশ্যক।",
+        )
+
+    # Check for duplicate entry of identical category/sub_type in the same month
+    dup_conditions = [
+        FixedCost.mess_id == mess_id,
+        FixedCost.month == cost_in.month,
+        FixedCost.category == cost_in.category,
+    ]
+    if cost_in.sub_type:
+        dup_conditions.append(FixedCost.sub_type == cost_in.sub_type)
+
+    dup_stmt = select(FixedCost).where(*dup_conditions)
+    dup = (await db.execute(dup_stmt)).scalars().first()
+    if dup:
+        cat_name = cost_in.sub_type or (cost_in.category.value if hasattr(cost_in.category, "value") else str(cost_in.category))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{cost_in.month} মাসে '{cat_name}' খাতের খরচ ইতোমধ্যে এন্ট্রি করা হয়েছে। প্রয়োজনে বিদ্যমান খরচটি এডিট করুন।",
+        )
+
     cost = FixedCost(
         mess_id=mess_id,
         month=cost_in.month,
@@ -163,6 +190,8 @@ async def update_fixed_cost(
     if not cost:
         raise HTTPException(status_code=404, detail="Fixed cost record not found")
 
+    await check_month_not_closed(db, mess_id, cost.month)
+
     if cost_in.category is not None:
         cost.category = cost_in.category
     if cost_in.title is not None:
@@ -215,6 +244,8 @@ async def delete_fixed_cost(
     cost = (await db.execute(stmt)).scalar_one_or_none()
     if not cost:
         raise HTTPException(status_code=404, detail="Fixed cost record not found")
+
+    await check_month_not_closed(db, mess_id, cost.month)
 
     await db.delete(cost)
     await db.commit()

@@ -2,7 +2,7 @@ import uuid
 import calendar
 import csv
 import io
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -55,17 +55,7 @@ async def get_master_sheet(
     start_date = date(year, m_num, 1)
     end_date = date(year, m_num, days_in_month)
 
-    # 3. Memberships
-    stmt_mem = (
-        select(Membership)
-        .options(selectinload(Membership.user))
-        .where(Membership.mess_id == mess_id, Membership.left_at.is_(None))
-        .order_by(Membership.joined_at.asc())
-    )
-    memberships = (await db.execute(stmt_mem)).scalars().all()
-    member_count = len(memberships)
-
-    # 4. Meals for the month
+    # 3. Meals for the month
     stmt_meals = (
         select(Meal)
         .where(
@@ -76,7 +66,7 @@ async def get_master_sheet(
     )
     meals = (await db.execute(stmt_meals)).scalars().all()
 
-    # 5. Bazars for the month (only approved entries count in calculations)
+    # 4. Bazars for the month (only approved entries count in calculations)
     stmt_bazars = (
         select(Bazar)
         .options(selectinload(Bazar.user))
@@ -90,18 +80,19 @@ async def get_master_sheet(
     )
     bazars = (await db.execute(stmt_bazars)).scalars().all()
 
-    # 6. Deposits for the month
+    # 5. Deposits for the month (verified only)
     stmt_deposits = (
         select(Deposit)
         .where(
             Deposit.mess_id == mess_id,
             Deposit.date >= start_date,
             Deposit.date <= end_date,
+            Deposit.is_verified == True,
         )
     )
     deposits = (await db.execute(stmt_deposits)).scalars().all()
 
-    # 7. Fixed costs for the month
+    # 6. Fixed costs for the month
     stmt_fixed = (
         select(FixedCost)
         .where(
@@ -111,6 +102,52 @@ async def get_master_sheet(
         .order_by(FixedCost.created_at.asc())
     )
     fixed_costs = (await db.execute(stmt_fixed)).scalars().all()
+
+    # 7. Memberships: include members who were active during this month or have month activity
+    month_start_dt = datetime.combine(start_date, datetime.min.time())
+    month_end_dt = datetime.combine(end_date, datetime.max.time())
+
+    stmt_mem = (
+        select(Membership)
+        .options(selectinload(Membership.user))
+        .where(
+            Membership.mess_id == mess_id,
+            Membership.joined_at <= month_end_dt,
+            (Membership.left_at.is_(None) | (Membership.left_at >= month_start_dt)),
+        )
+        .order_by(Membership.joined_at.asc())
+    )
+    memberships = list((await db.execute(stmt_mem)).scalars().all())
+
+    # Include any members who had activity (meals/bazar/deposit) in this month
+    active_user_ids = {m.user_id for m in memberships}
+    extra_user_ids = set()
+    for m in meals:
+        if m.user_id not in active_user_ids:
+            extra_user_ids.add(m.user_id)
+    for b in bazars:
+        if b.user_id not in active_user_ids:
+            extra_user_ids.add(b.user_id)
+    for d in deposits:
+        if d.user_id not in active_user_ids:
+            extra_user_ids.add(d.user_id)
+
+    if extra_user_ids:
+        stmt_extra = (
+            select(Membership)
+            .options(selectinload(Membership.user))
+            .where(
+                Membership.mess_id == mess_id,
+                Membership.user_id.in_(extra_user_ids),
+            )
+        )
+        extra_mems = (await db.execute(stmt_extra)).scalars().all()
+        for em in extra_mems:
+            if em.user_id not in active_user_ids:
+                memberships.append(em)
+                active_user_ids.add(em.user_id)
+
+    member_count = len(memberships)
 
     # Map meals by (user_id, day)
     user_day_meals = {}

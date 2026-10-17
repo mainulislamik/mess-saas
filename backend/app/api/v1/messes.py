@@ -16,6 +16,7 @@ from app.models.fixed_cost import FixedCost
 from app.models.member_rent import MemberMonthlyRent
 from app.models.enums import MemberRole, FixedCostCategory
 from app.core.deps import get_current_user, get_safe_month
+from app.api.v1.closings import check_month_not_closed
 from app.schemas.member_rent import (
     MonthlyRentSummaryResponse,
     MonthlyRentBatchUpdateRequest,
@@ -528,6 +529,8 @@ async def update_monthly_rent_batch(
 
     month = payload.month
 
+    await check_month_not_closed(db, mess_id, month)
+
     # 1. Target house rent
     if payload.target_house_rent is not None:
         fc_stmt = select(FixedCost).where(
@@ -612,6 +615,8 @@ async def distribute_rent_shortfall(
 
     month = payload.month
 
+    await check_month_not_closed(db, mess_id, month)
+
     rent_stmt = select(MemberMonthlyRent).where(
         MemberMonthlyRent.mess_id == mess_id,
         MemberMonthlyRent.month == month,
@@ -635,6 +640,12 @@ async def distribute_rent_shortfall(
     total_base = sum(r.base_seat_rent for r in existing_rents)
     deficit = max(0.0, target_rent - total_base)
 
+    if deficit <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{month} মাসে বাড়িভাড়ার কোনো ঘাটতি নেই (মোট ভাড়া: ৳{target_rent}, মোট সিট ভাড়া: ৳{total_base})। ঘাটতি বণ্টন প্রযোজ্য নয়।",
+        )
+
     residents = [r for r in existing_rents if r.is_resident]
     if not residents:
         residents = existing_rents
@@ -649,7 +660,18 @@ async def distribute_rent_shortfall(
             else:
                 r.vacancy_adjustment = 0.0
                 r.total_rent = r.base_seat_rent
-    elif payload.mode == "custom" and payload.adjustments:
+    elif payload.mode == "custom":
+        if not payload.adjustments:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="কাস্টম মোডের জন্য মেম্বারদের অ্যাডজাস্টমেন্ট প্রদান করা আবশ্যক।",
+            )
+        total_custom_adj = round(sum(float(v) for v in payload.adjustments.values()), 2)
+        if abs(total_custom_adj - round(deficit, 2)) > 1.0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"কাস্টম অ্যাডজাস্টমেন্টের যোগফল (৳{total_custom_adj}) মোট ঘাটতির (৳{round(deficit, 2)}) সমান হতে হবে।",
+            )
         for r in existing_rents:
             uid_str = str(r.user_id)
             if uid_str in payload.adjustments:

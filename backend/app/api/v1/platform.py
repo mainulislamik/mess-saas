@@ -94,7 +94,7 @@ async def get_platform_overview(
         )
     ).scalar_one() or 0.0
     total_bazar = (await db.execute(select(func.sum(Bazar.amount)))).scalar_one() or 0.0
-    total_deposits = (await db.execute(select(func.sum(Deposit.amount)))).scalar_one() or 0.0
+    total_deposits = (await db.execute(select(func.sum(Deposit.amount)).where(Deposit.is_verified == True))).scalar_one() or 0.0
     total_rev = (await db.execute(select(func.sum(SubscriptionPayment.amount)).where(SubscriptionPayment.status == "approved"))).scalar_one() or 0.0
 
     # Server metrics
@@ -193,7 +193,7 @@ async def get_mess_detail_superadmin(
     # Financial aggregate for this mess
     total_bazar = (await db.execute(select(func.sum(Bazar.amount)).where(Bazar.mess_id == mess_id))).scalar_one() or 0.0
     total_meals = (await db.execute(select(func.sum(Meal.breakfast * 0.5 + Meal.lunch + Meal.dinner)).where(Meal.mess_id == mess_id))).scalar_one() or 0.0
-    total_deposits = (await db.execute(select(func.sum(Deposit.amount)).where(Deposit.mess_id == mess_id))).scalar_one() or 0.0
+    total_deposits = (await db.execute(select(func.sum(Deposit.amount)).where(Deposit.mess_id == mess_id, Deposit.is_verified == True))).scalar_one() or 0.0
     total_fixed = (await db.execute(select(func.sum(FixedCost.amount)).where(FixedCost.mess_id == mess_id))).scalar_one() or 0.0
 
     members = []
